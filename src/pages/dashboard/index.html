@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard | Refugio del Superviviente</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/src/css/style.css">
+</head>
+<body style="background-color: #0c0c0c;">
+
+    <!-- NAVBAR DASHBOARD -->
+    <nav class="navbar navbar-dark bg-black border-bottom border-danger border-opacity-25 px-3">
+        <div class="container-fluid">
+            <a class="navbar-brand fw-bold text-danger d-flex align-items-center" href="/">
+                <i class="fas fa-biohazard fa-lg me-2"></i> L4D2 MMR
+            </a>
+            <div class="d-flex gap-2">
+                <span id="nav-username" class="text-white-50 me-2 d-none d-md-inline pt-1">Cargando...</span>
+                <button id="btn-logout" class="btn btn-sm btn-outline-danger">
+                    <i class="fas fa-power-off"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- CONTENIDO PRINCIPAL -->
+    <main class="container py-4 py-md-5">
+        
+        <!-- BIENVENIDA Y RESUMEN RÁPIDO -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <h1 class="display-5 fw-bold text-white mb-1">
+                    Panel de <span class="text-warning" id="dash-username">Superviviente</span>
+                </h1>
+                <p class="text-muted">Consulta tus estadísticas y prepárate para el Apocalipsis.</p>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <!-- TARJETA DE MMR Y ESTADO -->
+            <div class="col-lg-4">
+                <div class="card bg-dark text-center border-danger border-2 h-100 shadow-lg" style="background: radial-gradient(circle at top, #1e1e1e 0%, #0a0a0a 100%) !important;">
+                    <div class="card-body py-5">
+                        <div class="avatar-container mb-3 position-relative">
+                            <i class="fas fa-skull-crossbones fa-4x text-secondary opacity-50"></i>
+                        </div>
+                        <h5 class="text-uppercase fw-bold text-white-50 mb-1">Rango Actual</h5>
+                        
+                        <div class="mmr-display my-4">
+                            <h2 class="display-1 fw-bold text-danger m-0" id="mmr-big">---</h2>
+                            <span class="badge bg-warning text-dark" id="calibration-badge">Calibrando</span>
+                        </div>
+
+                        <hr class="border-secondary opacity-25 my-4">
+
+                        <div class="row text-center">
+                            <div class="col-6 border-end border-secondary border-opacity-25">
+                                <h4 class="fw-bold text-white mb-0" id="stat-games">0</h4>
+                                <small class="text-muted">Partidas</small>
+                            </div>
+                            <div class="col-6">
+                                <h4 class="fw-bold text-white mb-0" id="stat-winrate">0%</h4>
+                                <small class="text-muted">Victorias</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- HERRAMIENTAS DE JUEGO -->
+            <div class="col-lg-8">
+                <div class="row g-4">
+                    
+                    <!-- WIDGET: UNIRSE A PARTIDA (LANZADOR) -->
+                    <div class="col-12">
+                        <div class="card bg-dark border-success border-opacity-50 shadow">
+                            <div class="card-body d-md-flex align-items-center justify-content-between p-4">
+                                <div class="mb-3 mb-md-0">
+                                    <h4 class="fw-bold text-success mb-1">
+                                        <i class="fas fa-plug me-2"></i>Conexión Rápida
+                                    </h4>
+                                    <p class="text-muted small mb-0">¿Hay partida en curso? Introduce la IP o espera el enlace del Admin.</p>
+                                </div>
+                                
+                                <div class="d-flex gap-2">
+                                    <input type="text" id="game-ip" class="form-control form-control-lg bg-black text-white border-success border-opacity-50" placeholder="Ej: 192.168.1.10:27015">
+                                    <button id="btn-launch" class="btn btn-success btn-lg px-4 fw-bold">
+                                        <i class="fas fa-play me-1"></i> ENTRAR
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- HISTORIAL DE PARTIDAS (VACÍO POR AHORA) -->
+                    <div class="col-12">
+                        <div class="card bg-dark border-secondary border-opacity-25 shadow-sm">
+                            <div class="card-header bg-black py-3 d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0 fw-bold text-white"><i class="fas fa-history me-2"></i>Últimos Enfrentamientos</h5>
+                                <span class="badge bg-secondary opacity-75">Próximamente</span>
+                            </div>
+                            <div class="card-body text-center py-5">
+                                <i class="fas fa-ghost fa-3x text-muted opacity-25 mb-3"></i>
+                                <p class="text-muted mb-0">No se han registrado partidas recientes aún.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- SCRIPT LÓGICO DEL DASHBOARD -->
+    <script type="module" src="/src/js/dashboard.js"></script>
+</body>
+</html>

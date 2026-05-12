@@ -1,0 +1,21 @@
+{
+  "name": "l4d2_team",
+  "version": "1.0.0",
+  "description": "Proyecto: Sorteo Left 4 Dead\r Estado: Idea → MVP → Mejoras\r Tech: JS / Node / Front simple\r Objetivo: practicar lógica + subir a GitHub",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "vite": "^8.0.12"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.105.4"
+  }
+}

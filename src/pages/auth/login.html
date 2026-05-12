@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iniciar Sesión | L4D2 MMR Community</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/src/css/style.css">
+</head>
+<body class="d-flex align-items-center justify-content-center" style="min-height: 100vh; background-color: #0a0a0a;">
+    
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-5 col-lg-4">
+                
+                <div class="card bg-dark text-light shadow-lg border-danger border-2">
+                    <div class="card-body p-4 p-md-5">
+                        <div class="text-center mb-4">
+                            <i class="fas fa-skull fa-3x text-danger mb-3"></i>
+                            <h3 class="fw-bold text-uppercase tracking-wide">Entrar al Refugio</h3>
+                            <p class="text-muted small">Identifícate para ver tu MMR</p>
+                        </div>
+                        
+                        <form id="login-form">
+                            <!-- EMAIL -->
+                            <div class="mb-3">
+                                <label for="email" class="form-label small fw-bold text-warning">CORREO ELECTRÓNICO</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-danger border-0 text-white"><i class="fas fa-envelope"></i></span>
+                                    <input type="email" id="email" class="form-control bg-secondary text-white border-0" placeholder="nombre@correo.com" required>
+                                </div>
+                            </div>
+
+                            <!-- PASSWORD -->
+                            <div class="mb-4">
+                                <label for="password" class="form-label small fw-bold text-warning">CONTRASEÑA</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-danger border-0 text-white"><i class="fas fa-lock"></i></span>
+                                    <input type="password" id="password" class="form-control bg-secondary text-white border-0" placeholder="******" required>
+                                </div>
+                            </div>
+
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-danger btn-lg fw-bold shadow-sm border-danger">
+                                    INICIAR SESIÓN
+                                </button>
+                            </div>
+                            
+                            <div class="text-center mt-4">
+                                <span class="small text-muted">¿No tienes cuenta?</span>
+                                <a href="/src/pages/auth/register.html" class="text-warning text-decoration-none fw-bold small ms-1">Crea una aquí</a>
+                            </div>
+                            
+                            <div class="text-center mt-2">
+                                <a href="/" class="btn btn-sm btn-link text-muted"><i class="fas fa-arrow-left me-1"></i> Volver al Inicio</a>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="/src/js/auth.js"></script>
+</body>
+</html>

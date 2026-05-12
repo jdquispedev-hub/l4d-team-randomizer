@@ -1,3 +1,5 @@
+import { supabase } from './supabase.js';
+
 /* ===== L4D2 TEAM RANDOMIZER - JAVASCRIPT ===== */
 
 // ===== VARIABLES GLOBALES =====
@@ -9,6 +11,8 @@ let estadisticas = {
     partidasTotales: 0,
     rachaActual: 0
 };
+// ESTADO DE SESIÓN
+let usuarioActual = null;
 
 // ===== ELEMENTOS DEL DOM =====
 const elementos = {
@@ -53,12 +57,76 @@ const elementos = {
 };
 
 // ===== INICIALIZACIÓN =====
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     inicializarEventListeners();
     cargarDatosLocalStorage();
     actualizarInterfaz();
+    
+    // 🚀 NUEVO: Verificar sesión de Supabase
+    await verificarSesionUsuario();
+    
     reproducirSonido('inicio');
 });
+
+// 🚀 NUEVO: Lógica para detectar quién está conectado
+async function verificarSesionUsuario() {
+    const container = document.getElementById('auth-container');
+    if (!container) return;
+
+    try {
+        // Obtenemos sesión actual
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (session) {
+            // Si hay sesión, buscamos el Nickname real en la tabla de perfiles
+            const { data: profile, error } = await supabase
+                .from('profiles')
+                .select('username, mmr, games_played')
+                .eq('id', session.user.id)
+                .single();
+
+            if (profile) {
+                // Guardamos perfil globalmente para usar en la cola
+                usuarioActual = profile;
+                usuarioActual.id = session.user.id; // Necesitamos el ID real
+                
+                // Cambiamos el HTML dinámicamente
+                container.innerHTML = `
+                    <div class="row align-items-center bg-dark p-4 rounded border border-success" style="background: linear-gradient(135deg, #0a2210 0%, #0a0a0a 100%) !important;">
+                        <div class="col-md-8">
+                            <h2 class="display-6 fw-bold mb-1 text-success">
+                                <i class="fas fa-user-check me-2"></i>
+                                ¡Hola de nuevo, ${profile.username}!
+                            </h2>
+                            <p class="text-white-50 mb-0">
+                                MMR Actual: <span class="badge bg-info">${profile.games_played < 10 ? 'Calibrando' : profile.mmr}</span> 
+                                | Partidas: ${profile.games_played}/10
+                            </p>
+                        </div>
+                        <div class="col-md-4 text-end">
+                            <div class="d-flex gap-2 justify-content-end">
+                                <a href="/src/pages/dashboard/index.html" class="btn btn-success fw-bold">
+                                    <i class="fas fa-gamepad me-1"></i> IR AL PANEL
+                                </a>
+                                <button id="btn-logout" class="btn btn-outline-danger btn-sm">
+                                    <i class="fas fa-sign-out-alt"></i> Salir
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // Programar el botón de cerrar sesión
+                document.getElementById('btn-logout')?.addEventListener('click', async () => {
+                    await supabase.auth.signOut();
+                    window.location.reload(); // Refrescar para volver al estado visitante
+                });
+            }
+        }
+    } catch (err) {
+        console.error("Error detectando sesión:", err);
+    }
+}
 
 // ===== EVENT LISTENERS =====
 function inicializarEventListeners() {
@@ -126,9 +194,16 @@ function agregarJugador() {
 }
 
 // Ingresar a cola
-function ingresarACola() {
-    if (jugadores.length === 0) {
-        mostrarNotificacion('⚠️ No hay jugadores registrados', 'warning');
+async function ingresarACola() {
+    // Si no hemos verificado sesión aún, intentamos una vez
+    if (!usuarioActual) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+            mostrarNotificacion('⚠️ Debes iniciar sesión para unirte a la cola', 'warning');
+            return;
+        }
+        // Si hay sesión pero no perfil, la función verificarSesionUsuario debería encargarse, esperamos.
+        mostrarNotificacion('⚠️ Cargando datos de tu cuenta...', 'info');
         return;
     }
     
@@ -137,16 +212,24 @@ function ingresarACola() {
         return;
     }
     
-    // Simular ingreso del último jugador registrado
-    const ultimoJugador = jugadores[jugadores.length - 1];
-    if (!colaJugadores.some(j => j.id === ultimoJugador.id)) {
-        colaJugadores.push(ultimoJugador);
+    // Adaptamos el perfil a la estructura que espera la cola
+    const jugadorCola = {
+        id: usuarioActual.id,
+        nombre: usuarioActual.username,
+        nivel: usuarioActual.mmr || 1000, // Usamos MMR real
+        games_played: usuarioActual.games_played || 0,
+        personaje: 'No seleccionado'
+    };
+
+    // Validar si ya está adentro
+    if (!colaJugadores.some(j => j.id === jugadorCola.id)) {
+        colaJugadores.push(jugadorCola);
         actualizarInterfaz();
-        guardarDatosLocalStorage();
-        mostrarNotificacion(`🎯 ${ultimoJugador.nombre} ingresó a la cola`, 'info');
+        guardarDatosLocalStorage(); // Mantenemos cola en local por ahora
+        mostrarNotificacion(`🎯 ${jugadorCola.nombre} ingresó a la cola`, 'info');
         reproducirSonido('cola');
     } else {
-        mostrarNotificacion('⚠️ Este jugador ya está en la cola', 'warning');
+        mostrarNotificacion('⚠️ Ya estás en la cola de espera', 'warning');
     }
 }
 
@@ -339,9 +422,9 @@ function exportarJugadores() {
 // ===== FUNCIONES DE UI =====
 
 // Actualizar interfaz
-function actualizarInterfaz() {
+async function actualizarInterfaz() {
     actualizarEstadisticas();
-    actualizarJugadoresGrid();
+    await actualizarJugadoresGrid();
     actualizarCola();
     actualizarBotones();
 }
@@ -355,47 +438,65 @@ function actualizarEstadisticas() {
     elementos.rachaActual.textContent = estadisticas.rachaActual;
 }
 
-// Actualizar grid de jugadores
-function actualizarJugadoresGrid() {
+// Actualizar grid de jugadores desde Supabase
+async function actualizarJugadoresGrid() {
     if (!elementos.jugadoresGrid) return;
     
-    if (jugadores.length === 0) {
-        elementos.jugadoresGrid.innerHTML = `
-            <div class="col-lg-4 col-md-6">
-                <div class="player-card">
-                    <div class="player-avatar">
-                        <i class="fas fa-user-secret"></i>
-                    </div>
-                    <div class="player-info">
-                        <h5 class="player-name">Esperando jugadores...</h5>
-                        <div class="player-stats">
-                            <span class="badge bg-secondary">MMR: --</span>
-                            <span class="badge bg-info">Personaje: --</span>
+    try {
+        // Obtenemos jugadores reales, ordenados por MMR de mayor a menor
+        const { data: players, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .order('mmr', { ascending: false });
+
+        if (error) throw error;
+
+        if (!players || players.length === 0) {
+            elementos.jugadoresGrid.innerHTML = `
+                <div class="col-lg-4 col-md-6">
+                    <div class="player-card">
+                        <div class="player-avatar"><i class="fas fa-user-secret"></i></div>
+                        <div class="player-info">
+                            <h5 class="player-name">Esperando jugadores...</h5>
+                            <div class="player-stats">
+                                <span class="badge bg-secondary">Sin registros aún</span>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
-        `;
-        return;
-    }
-    
-    elementos.jugadoresGrid.innerHTML = jugadores.map(jugador => `
-        <div class="col-lg-4 col-md-6">
-            <div class="player-card">
-                <div class="player-avatar">
-                    ${getPersonajeEmoji(jugador.personaje)}
-                </div>
-                <div class="player-info">
-                    <h5 class="player-name">${jugador.nombre}</h5>
-                    <div class="player-stats">
-                        <span class="badge bg-danger">MMR: ${jugador.nivel}</span>
-                        <span class="badge bg-info">${jugador.personaje}</span>
-                        ${colaJugadores.some(c => c.id === jugador.id) ? '<span class="badge bg-success">En cola</span>' : ''}
+            `;
+            return;
+        }
+        
+        // Renderizado real
+        elementos.jugadoresGrid.innerHTML = players.map(p => {
+            // Lógica de Ocultar MMR si < 10 partidas
+            const mmrDisplay = p.games_played < 10 ? 'Calibrando' : p.mmr;
+            const badgeColor = p.games_played < 10 ? 'bg-warning text-dark' : 'bg-danger';
+
+            return `
+                <div class="col-lg-4 col-md-6">
+                    <div class="player-card h-100">
+                        <div class="player-avatar">
+                            ${getPersonajeEmoji(p.avatar_url || 'No seleccionado')}
+                        </div>
+                        <div class="player-info">
+                            <h5 class="player-name fw-bold">${p.username}</h5>
+                            <div class="player-stats">
+                                <span class="badge ${badgeColor} fs-6">MMR: ${mmrDisplay}</span>
+                                <span class="badge bg-dark small">${p.games_played}/10 PJ</span>
+                                ${colaJugadores.some(c => c.id === p.id) ? '<span class="badge bg-success ms-1">EN COLA</span>' : ''}
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </div>
-    `).join('');
+            `;
+        }).join('');
+
+    } catch (err) {
+        console.error("Error cargando ranking:", err);
+        elementos.jugadoresGrid.innerHTML = `<p class="text-danger">Error al conectar con la base de datos.</p>`;
+    }
 }
 
 // Actualizar cola
@@ -412,11 +513,16 @@ function actualizarCola() {
         return;
     }
     
-    elementos.colaLista.innerHTML = colaJugadores.map((jugador, index) => `
-        <li class="queue-item">
-            <strong>#${index + 1}</strong> ${jugador.nombre} - Nivel ${jugador.nivel} - ${jugador.personaje}
-        </li>
-    `).join('');
+    elementos.colaLista.innerHTML = colaJugadores.map((jugador, index) => {
+        // Lógica de Ocultar MMR en Cola si está calibrando
+        const mmrCola = jugador.games_played < 10 ? 'Calibrando' : jugador.nivel;
+        return `
+            <li class="queue-item">
+                <strong>#${index + 1}</strong> ${jugador.nombre} - 
+                <span class="text-warning">${mmrCola}</span>
+            </li>
+        `;
+    }).join('');
 }
 
 // Actualizar botones
