@@ -19,6 +19,12 @@ let opcionesMapas = [];
 let votosMapas = [0, 0, 0];
 let mapaSeleccionado = null;
 
+// 🎮 VARIABLES DE PARTIDA ACTIVA SYNC (GLOBAL EN NUBE)
+let partidaActiva = null;
+let opcionesMapasCompletas = [];
+let votosPartida = [];
+let intervalCuentaAtras = null;
+
 // ===== ELEMENTOS DEL DOM =====
 const elementos = {
     // Formulario
@@ -75,6 +81,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 📡 🚀 NUEVO: Sincronizar y escuchar la cola Realtime desde Supabase
     await cargarColaDesdeSupabase();
     escucharColaEnTiempoReal();
+    
+    // 🎮 NUEVO: Sincronizar partida activa global y conectar receptores de votos
+    await verificarYRestaurarPartidaActiva();
+    escucharPartidasEnTiempoReal();
     
     await actualizarInterfaz();
     
@@ -293,193 +303,478 @@ async function vaciarCola() {
     }
 }
 
-// Sortear equipos
-function sortearEquipos() {
+// Sortear equipos global en la nube (Supabase Sync)
+async function sortearEquipos() {
     if (colaJugadores.length < 4) {
         mostrarNotificacion('⚠️ Se necesitan al menos 4 jugadores para sortear', 'warning');
         return;
     }
+
+    mostrarNotificacion('🎲 Balanceando y creando partida en la nube...', 'info');
+    reproducirSonido('sorteo');
     
     const jugadoresEnCola = [...colaJugadores];
     
-    // Mezclar jugadores
+    // 1. Mezclar jugadores
     for (let i = jugadoresEnCola.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [jugadoresEnCola[i], jugadoresEnCola[j]] = [jugadoresEnCola[j], jugadoresEnCola[i]];
     }
     
-    // Dividir en equipos
+    // 2. Dividir en equipos balanceados temporalmente
     const mitad = Math.ceil(jugadoresEnCola.length / 2);
+    const equipoAlfa = jugadoresEnCola.slice(0, mitad);
+    const equipoBravo = jugadoresEnCola.slice(mitad);
+
+    // Mapear estructura para compatibilidad visual
     equipos = [
-        { nombre: 'Equipo Alfa', jugadores: jugadoresEnCola.slice(0, mitad) },
-        { nombre: 'Equipo Bravo', jugadores: jugadoresEnCola.slice(mitad) }
+        { nombre: 'Supervivientes', jugadores: equipoAlfa },
+        { nombre: 'Infectados', jugadores: equipoBravo }
     ];
-    
-    // Calcular estadísticas de equipos
-    equipos.forEach(equipo => {
-        equipo.nivelPromedio = equipo.jugadores.reduce((sum, j) => sum + j.nivel, 0) / equipo.jugadores.length;
-        equipo.nivelTotal = equipo.jugadores.reduce((sum, j) => sum + j.nivel, 0);
-    });
-    
-    estadisticas.partidasTotales++;
-    estadisticas.rachaActual++;
-    
-    // 📡 NUEVO: Al sortear, limpiamos los jugadores que acaban de entrar de la cola global
-    const idsSorteados = jugadoresEnCola.map(j => j.id);
-    supabase.from('lobby_queue').delete().in('profile_id', idsSorteados).then(({ error }) => {
-        if (error) console.error("Error limpiando la cola tras el sorteo:", error);
-    });
-    
-    // Iniciar votación de mapas en vez de mostrar resultados inmediatamente
-    iniciarVotacionMapas();
-    guardarDatosLocalStorage();
-    
-    mostrarNotificacion('🎲 ¡Equipos sorteados! Abriendo votación de mapas...', 'success');
-    reproducirSonido('sorteo');
+
+    try {
+        // 3. Obtener mapas candidatos desde Supabase
+        const { data: maps, error: mapsErr } = await supabase
+            .from('maps')
+            .select('*');
+
+        if (mapsErr) throw mapsErr;
+        if (!maps || maps.length === 0) throw new Error('No se encontraron mapas');
+
+        // Tomar 3 mapas aleatorios
+        const mezclados = [...maps].sort(() => 0.5 - Math.random());
+        const chosenMaps = mezclados.slice(0, 3);
+
+        // 4. Crear la Partida Activa en Supabase en estado 'voting'
+        const { data: newMatch, error: matchErr } = await supabase
+            .from('matches')
+            .insert([{
+                status: 'voting',
+                team_alfa: equipoAlfa,
+                team_bravo: equipoBravo,
+                map_opt_1: chosenMaps[0].id,
+                map_opt_2: chosenMaps[1].id,
+                map_opt_3: chosenMaps[2].id,
+                recorded_by: usuarioActual ? usuarioActual.id : null
+            }])
+            .select()
+            .single();
+
+        if (matchErr) throw matchErr;
+
+        // Guardar estadísticas básicas locales
+        estadisticas.partidasTotales++;
+        estadisticas.rachaActual++;
+        
+        // 5. Limpiar a los jugadores elegidos del Lobby global en Supabase
+        const idsSorteados = jugadoresEnCola.map(j => j.id);
+        await supabase
+            .from('lobby_queue')
+            .delete()
+            .in('profile_id', idsSorteados);
+
+        mostrarNotificacion('🔥 ¡Lobby cerrado! Votación de mapas iniciada globalmente.', 'success');
+        
+        // El Realtime propagará la inserción a todas las ventanas automáticamente!
+
+    } catch (err) {
+        console.error("Error en sorteo:", err);
+        mostrarNotificacion('❌ Error fatal al crear partida en la nube', 'danger');
+    }
 }
 
 // ===== VOTACIÓN DE MAPAS =====
 
 // Iniciar votación de mapas consultando Supabase
-async function iniciarVotacionMapas() {
-    if (!elementos.containerMapas) return;
-    
-    elementos.containerMapas.innerHTML = `
-        <div class="col-12 text-center text-warning py-5">
-            <div class="spinner-border text-danger me-2" role="status"></div> 
-            Cargando mapas oficiales desde Supabase...
-        </div>
-    `;
-    
-    if (elementos.btnConfirmarMapa) elementos.btnConfirmarMapa.disabled = true;
-    votosMapas = [0, 0, 0];
-    mapaSeleccionado = null;
+// ===== VOTACIÓN DE MAPAS SINCRONIZADA =====
 
-    // Abrir modal programáticamente usando Bootstrap JS cargado en index.html
+// Abre el modal de votación para todos los clientes conectados
+function abrirModalVotacionPublico() {
     const modalElement = document.getElementById('modal-votacion-mapas');
-    if (!modalElement) {
-        mostrarResultados();
-        return;
+    if (!modalElement) return;
+
+    // Instanciar el modal de Bootstrap si no existe previamente
+    let modalInstance = bootstrap.Modal.getInstance(modalElement);
+    if (!modalInstance) {
+        modalInstance = new bootstrap.Modal(modalElement);
     }
     
-    const modalInstance = new bootstrap.Modal(modalElement);
     modalInstance.show();
 
-    try {
-        // Obtenemos los mapas disponibles
-        const { data: maps, error } = await supabase
-            .from('maps')
-            .select('*');
-        
-        if (error) throw error;
-        
-        if (!maps || maps.length === 0) {
-            throw new Error("No se encontraron mapas en la base de datos.");
-        }
-
-        // Elegir 3 mapas al azar sin repetir
-        const mezclados = [...maps].sort(() => 0.5 - Math.random());
-        opcionesMapas = mezclados.slice(0, Math.min(3, mezclados.length));
-
-        renderizarOpcionesVotacion();
-    } catch (err) {
-        console.error("Error al cargar mapas de Supabase:", err);
-        mostrarNotificacion("⚠️ No se pudieron cargar los mapas de la DB.", "danger");
-        
-        // Cerrar modal y saltar votación en caso de fallo extrema
-        setTimeout(() => {
-            const modal = bootstrap.Modal.getInstance(modalElement);
-            if (modal) modal.hide();
-            mostrarResultados();
-        }, 1500);
+    // Configurar el botón "Confirmar Mapa" solo para el administrador que lanzó la partida
+    if (elementos.btnConfirmarMapa) {
+        const esHost = partidaActiva && partidaActiva.recorded_by === (usuarioActual ? usuarioActual.id : null);
+        elementos.btnConfirmarMapa.style.display = esHost ? 'block' : 'none';
+        elementos.btnConfirmarMapa.disabled = false; 
     }
+
+    renderizarOpcionesVotacionPublica();
 }
 
-// Renderizar las 3 cartas de mapas en el modal
-function renderizarOpcionesVotacion() {
-    if (!elementos.containerMapas) return;
+// Renderiza las cartas de los 3 mapas candidatos bajados de la nube
+function renderizarOpcionesVotacionPublica() {
+    if (!elementos.containerMapas || !opcionesMapasCompletas.length) return;
     elementos.containerMapas.innerHTML = '';
     
-    opcionesMapas.forEach((mapa, index) => {
+    opcionesMapasCompletas.forEach((mapa, index) => {
+        const conteoVotos = votosPartida.filter(v => v.map_id === mapa.id).length;
+        
+        // Analizamos el estado de voto del usuario actual para dar feedback visual
+        const yaVoteEsteMapa = usuarioActual ? votosPartida.some(v => v.profile_id === usuarioActual.id && v.map_id === mapa.id) : false;
+
         const col = document.createElement('div');
         col.className = 'col-md-4';
         col.innerHTML = `
-            <div class="map-vote-card h-100" data-index="${index}">
+            <div class="map-vote-card h-100 ${yaVoteEsteMapa ? 'border-success border-3 shadow-pulse animate__animated animate__pulse' : ''}" data-index="${index}">
                 <img src="${mapa.image_url || 'https://images.alphacoders.com/105/thumb-1920-105187.jpg'}" class="map-vote-img" alt="${mapa.name}" onerror="this.src='https://images.alphacoders.com/105/thumb-1920-105187.jpg'">
                 <div class="map-vote-info">
-                    <h6 class="map-vote-name">${mapa.name}</h6>
+                    <h6 class="map-vote-name fw-bold">${mapa.name}</h6>
                     <div>
-                        <div class="vote-badge mb-2" id="vote-badge-${index}">0</div>
+                        <div class="vote-badge mb-2" id="vote-badge-${index}">${conteoVotos}</div>
                     </div>
-                    <button class="btn btn-primary w-100 btn-votar" data-index="${index}">
-                        <i class="fas fa-plus-circle me-1"></i> Registrar Voto
+                    <button class="btn ${yaVoteEsteMapa ? 'btn-success shadow' : 'btn-primary'} w-100 btn-votar" data-index="${index}">
+                        <i class="fas ${yaVoteEsteMapa ? 'fa-check-circle' : 'fa-mouse-pointer'} me-1"></i> 
+                        ${yaVoteEsteMapa ? 'Tu Voto (Elegido)' : 'Votar / Cambiar'}
                     </button>
                 </div>
             </div>
         `;
         
-        // Eventos de clic para registrar voto (tanto en botón como en carta)
+        // Asociar eventos de clic
         const card = col.querySelector('.map-vote-card');
         const btnVotar = col.querySelector('.btn-votar');
         
-        const handledVote = (e) => {
+        const logicVoto = async (e) => {
             e.preventDefault();
             e.stopPropagation();
-            registrarVotoLocal(index);
+            // Si ya votó por este exacto mapa, ignorar click para no saturar.
+            // De lo contrario, permitir votar o cambiar el voto al nuevo mapa.
+            if (!yaVoteEsteMapa) {
+                await registrarVotoEnSupabase(mapa.id);
+            }
         };
         
-        btnVotar.addEventListener('click', handledVote);
-        card.addEventListener('click', handledVote);
+        btnVotar.addEventListener('click', logicVoto);
+        card.addEventListener('click', logicVoto);
         
         elementos.containerMapas.appendChild(col);
     });
 }
 
-// Incrementar contador local de votos para una opción
-function registrarVotoLocal(index) {
-    votosMapas[index]++;
-    const badge = document.getElementById(`vote-badge-${index}`);
-    if (badge) {
-        badge.innerText = votosMapas[index];
-        badge.classList.add('animate__animated', 'animate__bounceIn');
-        setTimeout(() => badge.classList.remove('animate__animated', 'animate__bounceIn'), 500);
+// Envía o ACTUALIZA el voto oficial a la tabla match_votes usando UPSERT
+async function registrarVotoEnSupabase(mapId) {
+    if (!usuarioActual) {
+        mostrarNotificacion('⚠️ Inicia sesión para votar!', 'warning');
+        return;
     }
+    if (!partidaActiva) return;
+
+    // Opcional: Validar participación activa en los equipos
+    const todosLosJugadores = [...equipos[0].jugadores, ...equipos[1].jugadores];
+    const soyParticipante = todosLosJugadores.some(p => p.id === usuarioActual.id);
     
-    if (elementos.btnConfirmarMapa) {
-        elementos.btnConfirmarMapa.disabled = false; // Habilitar botón de confirmar al tener al menos un voto
+    if (!soyParticipante) {
+        mostrarNotificacion('⚠️ Espectador: No formas parte de esta partida sorteada', 'warning');
+        return;
     }
-    
-    reproducirSonido('click');
+
+    try {
+        // Cambiamos insert por upsert() permitiendo que cambien el voto en la tabla dinámicamente!
+        const { error } = await supabase
+            .from('match_votes')
+            .upsert([{
+                match_id: partidaActiva.id,
+                profile_id: usuarioActual.id,
+                map_id: mapId
+            }], { onConflict: 'match_id,profile_id' });
+
+        if (error) {
+            throw error;
+        } else {
+            mostrarNotificacion('🎯 ¡Voto registrado / actualizado!', 'success');
+            reproducirSonido('click');
+        }
+    } catch (err) {
+        console.error("Error registrando o cambiando voto:", err);
+        mostrarNotificacion('❌ Error al procesar tu voto', 'danger');
+    }
 }
 
-// Lógica de cierre de votación y desempate
-function finalizarVotacionMapas() {
-    const maxVotos = Math.max(...votosMapas);
-    const indicesGanadores = [];
+// Cierre de votación por parte del Administrador y cálculo de ganador
+async function finalizarVotacionMapas() {
+    if (!partidaActiva) return;
+
+    mostrarNotificacion('💾 Guardando mapa y cerrando votaciones...', 'info');
+
+    // 1. Sumarizar votos acumulados en caché
+    const recuento = {};
+    opcionesMapasCompletas.forEach(m => recuento[m.id] = 0);
     
-    votosMapas.forEach((votos, index) => {
-        if (votos === maxVotos) indicesGanadores.push(index);
+    votosPartida.forEach(v => {
+        if (recuento[v.map_id] !== undefined) {
+            recuento[v.map_id]++;
+        }
     });
 
-    let ganadorIndex;
-    if (indicesGanadores.length === 1) {
-        ganadorIndex = indicesGanadores[0];
-    } else {
-        // Desempate aleatorio si hay empate de votos altos
-        ganadorIndex = indicesGanadores[Math.floor(Math.random() * indicesGanadores.length)];
-        mostrarNotificacion("🎲 ¡Empate! El servidor ha decidido el mapa al azar.", "info");
+    // 2. Evaluar mapa más votado
+    let maximoVotos = -1;
+    let finalistas = [];
+
+    Object.keys(recuento).forEach(idKey => {
+        const currentId = parseInt(idKey);
+        const totalVotos = recuento[currentId];
+        if (totalVotos > maximoVotos) {
+            maximoVotos = totalVotos;
+            finalistas = [currentId];
+        } else if (totalVotos === maximoVotos) {
+            finalistas.push(currentId);
+        }
+    });
+
+    if (finalistas.length === 0) {
+        // Si nadie votó, elegir uno totalmente al azar
+        finalistas = opcionesMapasCompletas.map(m => m.id);
     }
 
-    mapaSeleccionado = opcionesMapas[ganadorIndex];
+    // Desempate totalmente aleatorio si hay colisión
+    const finalId = finalistas[Math.floor(Math.random() * finalistas.length)];
+    const mapaGanadorObj = opcionesMapasCompletas.find(m => m.id === finalId);
 
-    // Cerrar modal programáticamente
+    if (finalistas.length > 1) {
+        mostrarNotificacion("🎲 ¡Empate absoluto! Servidor sorteó el mapa.", "info");
+    }
+
+    try {
+        // 3. Actualizar status a 'playing' y definir el map_id final
+        const { error } = await supabase
+            .from('matches')
+            .update({
+                status: 'playing',
+                map_id: finalId
+            })
+            .eq('id', partidaActiva.id);
+
+        if (error) throw error;
+
+        mostrarNotificacion(`🗺️ ¡Mapa definido!: ${mapaGanadorObj.name}`, "success");
+        // Todas las demás ventanas captarán el cambio de status a 'playing' vía Realtime!
+
+    } catch (err) {
+        console.error("Error en cierre de votación:", err);
+        mostrarNotificacion("❌ No se pudo actualizar el servidor", "danger");
+    }
+}
+
+// ===== SISTEMA DE PERSISTENCIA Y REALTIME DE PARTIDA ACTIVA =====
+
+// Escanea si hay una partida pendiente de votación al cargar la app
+async function verificarYRestaurarPartidaActiva() {
+    try {
+        const { data: active, error } = await supabase
+            .from('matches')
+            .select('*')
+            .eq('status', 'voting')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        if (error) throw error;
+
+        if (active) {
+            partidaActiva = active;
+            
+            // Reconstruimos el array estructurado clásico para visualización
+            equipos = [
+                { nombre: 'Supervivientes', jugadores: active.team_alfa || [] },
+                { nombre: 'Infectados', jugadores: active.team_bravo || [] }
+            ];
+            
+            // Calcular estadísticas
+            equipos.forEach(eq => {
+                eq.nivelTotal = eq.jugadores.reduce((sum, j) => sum + (j.nivel || 1000), 0);
+                eq.nivelPromedio = eq.nivelTotal / (eq.jugadores.length || 1);
+            });
+
+            // Descargar maps candidatos
+            const candIds = [active.map_opt_1, active.map_opt_2, active.map_opt_3].filter(Boolean);
+            const { data: rawMaps, error: errMaps } = await supabase
+                .from('maps')
+                .select('*')
+                .in('id', candIds);
+            
+            if (errMaps) throw errMaps;
+            opcionesMapasCompletas = rawMaps || [];
+
+            // Descargar votos actuales
+            const { data: rawVotes, error: errVotes } = await supabase
+                .from('match_votes')
+                .select('*')
+                .eq('match_id', active.id);
+
+            if (errVotes) throw errVotes;
+            votosPartida = rawVotes || [];
+
+            // Lanzar modal sincronizado
+            abrirModalVotacionPublico();
+
+            // ⏲️ Activar cuenta atrás sincronizada a milisegundos del servidor!
+            iniciarCuentaAtrasVisual();
+        } else {
+            // 🛡️ CIERRE ABSOLUTO DE EMERGENCIA DEL MODAL PARA TODOS
+            forzarCerrarModalVotacion();
+            
+            if (partidaActiva) {
+                partidaActiva = null;
+                await cargarUltimaPartidaGanada();
+            }
+        }
+    } catch (err) {
+        console.error("Error sincronizando estado de partida:", err);
+    }
+}
+
+// Actualiza los votos locales consultando el servidor
+async function cargarYRefrescarVotos() {
+    if (!partidaActiva) return;
+    try {
+        const { data: votes, error } = await supabase
+            .from('match_votes')
+            .select('*')
+            .eq('match_id', partidaActiva.id);
+
+        if (error) throw error;
+        votosPartida = votes || [];
+        renderizarOpcionesVotacionPublica(); // Redibujar badges de conteo
+    } catch (err) {
+        console.error("Error cargando votos en vivo:", err);
+    }
+}
+
+// Activa la escucha bidireccional para Partidas y Votos
+function escucharPartidasEnTiempoReal() {
+    // Canal Matches
+    supabase
+        .channel('live-matches')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'matches' }, async () => {
+            console.log('📡 Señal de partida detectada. Sincronizando...');
+            await verificarYRestaurarPartidaActiva();
+        })
+        .subscribe();
+
+    // Canal Votos - Cambiado a '*' para captar actualizaciones cuando alguien CAMBIA de voto!
+    supabase
+        .channel('live-votes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'match_votes' }, async (pl) => {
+            if (partidaActiva) {
+                console.log('📡 Actividad en votos (inserción/actualización) captada...');
+                await cargarYRefrescarVotos();
+            }
+        })
+        .subscribe();
+}
+
+// ⏲️ TEMPORIZADOR SÚPER PRECIOSO SINCRONIZADO AL TIEMPO DEL SERVIDOR
+function iniciarCuentaAtrasVisual() {
+    if (intervalCuentaAtras) clearInterval(intervalCuentaAtras);
+    
+    const spanReloj = document.getElementById('modal-timer-display');
+    if (!spanReloj || !partidaActiva) return;
+
+    const duracionTotal = 20; // Duración establecida de 20 segundos
+    const timestampCreacion = new Date(partidaActiva.created_at).getTime();
+
+    const tick = async () => {
+        const ahora = new Date().getTime();
+        // Calculamos exactamente los segundos reales transcurridos desde la base de datos!
+        const transcurridos = Math.floor((ahora - timestampCreacion) / 1000);
+        const restantes = Math.max(0, duracionTotal - transcurridos);
+
+        spanReloj.innerText = `${restantes}s restantes`;
+
+        // Feedback visual de alerta en los últimos 5 segundos!
+        if (restantes <= 5) {
+            spanReloj.className = 'badge bg-danger ms-3 fs-6 shadow-pulse animate__animated animate__shakeX animate__infinite';
+        } else {
+            spanReloj.className = 'badge bg-warning text-dark ms-3 fs-6 shadow-pulse animate__animated animate__pulse animate__infinite';
+        }
+
+        if (restantes <= 0) {
+            clearInterval(intervalCuentaAtras);
+            intervalCuentaAtras = null;
+            spanReloj.innerText = "¡TIEMPO CUMPLIDO!";
+
+            // IMPORTANTE: Solo el Host que originó la partida invoca a la API
+            // para evitar colisiones o sobreescribir datos si los 8 gatillan a la vez
+            const esHost = partidaActiva.recorded_by === (usuarioActual ? usuarioActual.id : null);
+            if (esHost) {
+                console.log("⏲️ Host disparando cierre automático por tiempo agotado...");
+                await finalizarVotacionMapas();
+            }
+        }
+    };
+
+    // Tick inmediato y arranque del intervalo cada segundo
+    tick();
+    intervalCuentaAtras = setInterval(tick, 1000);
+}
+
+// 🛡️ DESTRUCTOR ABSOLUTO DEL MODAL PARA EVITAR BLOQUEOS VISUALES
+function forzarCerrarModalVotacion() {
+    // Limpiamos timers para liberar memoria
+    if (intervalCuentaAtras) {
+        clearInterval(intervalCuentaAtras);
+        intervalCuentaAtras = null;
+    }
+
     const modalElement = document.getElementById('modal-votacion-mapas');
-    const modal = bootstrap.Modal.getInstance(modalElement);
-    if (modal) modal.hide();
+    if (!modalElement) return;
 
-    // Mostrar finalmente los resultados en la pantalla principal con el mapa ganador
-    mostrarResultados();
-    mostrarNotificacion(`🗺️ Mapa seleccionado: ${mapaSeleccionado.name}`, "success");
+    // 1. Cerrar vía API oficial de Bootstrap
+    const instance = bootstrap.Modal.getInstance(modalElement);
+    if (instance) {
+        instance.hide();
+    }
+
+    // 2. Sanitización profunda del DOM. Los bucles en Realtime a veces dejan huérfanos
+    // los backdrops grises de Bootstrap. Esto los barre de raíz para todos los usuarios.
+    setTimeout(() => {
+        document.body.classList.remove('modal-open');
+        document.body.style.overflow = '';
+        document.body.style.paddingRight = '';
+        document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+    }, 250);
+}
+
+// Carga los resultados del match ganador tras finalizar la votación
+async function cargarUltimaPartidaGanada() {
+    try {
+        const { data: game, error } = await supabase
+            .from('matches')
+            .select('*, maps:map_id (*)')
+            .eq('status', 'playing')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        if (error) throw error;
+
+        if (game) {
+            equipos = [
+                { nombre: 'Supervivientes', jugadores: game.team_alfa || [] },
+                { nombre: 'Infectados', jugadores: game.team_bravo || [] }
+            ];
+
+            equipos.forEach(eq => {
+                eq.nivelTotal = eq.jugadores.reduce((sum, j) => sum + (j.nivel || 1000), 0);
+                eq.nivelPromedio = eq.nivelTotal / (eq.jugadores.length || 1);
+            });
+
+            mapaSeleccionado = game.maps; 
+            mostrarResultados();
+        }
+    } catch (err) {
+        console.error("Error cargando resolución final de partida:", err);
+    }
 }
 
 // ===== FUNCIONES DE TIEMPO REAL (REALTIME) =====
@@ -592,65 +887,112 @@ async function sorteoRapido() {
     }
 }
 
-// Mostrar resultados
+// Mostrar resultados en un Layout VERSUS profesional al centro
 function mostrarResultados() {
     elementos.resultadosSection.style.display = 'block';
     elementos.equiposResultados.innerHTML = '';
     
-    // Renderizar mapa elegido en su contenedor
+    // 1. Limpiamos contenedor clásico de banner (ahora irá al centro en el círculo)
     if (elementos.containerMapaElegido) {
         elementos.containerMapaElegido.innerHTML = '';
-        if (mapaSeleccionado) {
-            elementos.containerMapaElegido.innerHTML = `
-                <div class="mapa-elegido-banner animate__animated animate__fadeIn">
-                    <img src="${mapaSeleccionado.image_url || 'https://images.alphacoders.com/105/thumb-1920-105187.jpg'}" class="mapa-elegido-img" alt="${mapaSeleccionado.name}" onerror="this.src='https://images.alphacoders.com/105/thumb-1920-105187.jpg'">
-                    <div class="mapa-elegido-info">
-                        <h4><i class="fas fa-compass text-danger me-2"></i>CAMPAÑA OFICIAL ELEGIDA</h4>
-                        <p class="fw-bold text-warning mb-0">${mapaSeleccionado.name}</p>
-                    </div>
-                </div>
-            `;
-        }
     }
+
+    if (!equipos || equipos.length < 2) return;
+
+    // 2. Calcular Predicción / Probabilidades Matemáticas de victoria (Algoritmo Elo simplificado)
+    const eq1 = equipos[0];
+    const eq2 = equipos[1];
     
-    equipos.forEach((equipo, index) => {
-        const equipoCard = crearEquipoCard(equipo, index);
-        elementos.equiposResultados.appendChild(equipoCard);
-    });
+    const avg1 = eq1.jugadores.reduce((sum, j) => sum + (j.nivel || 1000), 0) / (eq1.jugadores.length || 1);
+    const avg2 = eq2.jugadores.reduce((sum, j) => sum + (j.nivel || 1000), 0) / (eq2.jugadores.length || 1);
     
-    // Scroll a resultados
+    // Calculamos el Elo rating probability
+    const probA = 1 / (1 + Math.pow(10, (avg2 - avg1) / 400));
+    const percentA = Math.round(probA * 100);
+    const percentB = 100 - percentA;
+
+    // 3. Fabricar las columnas de los equipos (col-lg-5)
+    const colIzq = crearEquipoCard(eq1, 0); // Supervivientes
+    const colDer = crearEquipoCard(eq2, 1); // Infectados
+
+    // 4. Fabricar el Centro de Colisión VERSUS (col-lg-2)
+    const colCentro = document.createElement('div');
+    colCentro.className = 'col-lg-2 d-flex align-items-center justify-content-center py-3';
+    
+    const urlMapa = mapaSeleccionado ? mapaSeleccionado.image_url : 'https://images.alphacoders.com/105/thumb-1920-105187.jpg';
+    const nombreMapa = mapaSeleccionado ? mapaSeleccionado.name : 'Campaña Aleatoria';
+
+    colCentro.innerHTML = `
+        <div class="vs-center-container text-center animate__animated animate__zoomIn shadow">
+            <div class="vs-badge">VS</div>
+            
+            <div class="vs-map-circle-wrap">
+                <img src="${urlMapa}" class="vs-map-circle-img" onerror="this.src='https://images.alphacoders.com/105/thumb-1920-105187.jpg'" alt="Mapa">
+            </div>
+            
+            <h6 class="text-warning fw-bold text-uppercase letter-spacing-1 mb-3" style="font-size: 0.85rem; text-shadow: 1px 1px 3px #000;">
+                ${nombreMapa}
+            </h6>
+
+            <!-- Probabilidad de Victoria Inteligente -->
+            <div class="prediction-container p-2 rounded shadow-sm">
+                <small class="text-white-50 d-block mb-2 fw-bold" style="font-size: 0.6rem; letter-spacing: 1px; font-family: 'Russo One', sans-serif;">PROBABILIDAD</small>
+                <div class="d-flex justify-content-between align-items-center gap-1">
+                    <span class="badge bg-danger px-1.5" style="font-size: 0.7rem;">${percentA}%</span>
+                    <div class="progress bg-secondary flex-grow-1" style="height: 5px;">
+                        <div class="progress-bar bg-danger" role="progressbar" style="width: ${percentA}%"></div>
+                        <div class="progress-bar bg-success" role="progressbar" style="width: ${percentB}%"></div>
+                    </div>
+                    <span class="badge bg-success px-1.5" style="font-size: 0.7rem;">${percentB}%</span>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Insertamos en el row en el orden visual exacto: IZQ -> CENTRO -> DER
+    elementos.equiposResultados.appendChild(colIzq);
+    elementos.equiposResultados.appendChild(colCentro);
+    elementos.equiposResultados.appendChild(colDer);
+    
+    // Scroll fluido a resultados
     elementos.resultadosSection.scrollIntoView({ behavior: 'smooth' });
 }
 
-// Crear card de equipo
+// Crear card de equipo optimizada para el versus lateral
 function crearEquipoCard(equipo, index) {
     const col = document.createElement('div');
-    col.className = 'col-lg-6';
+    col.className = 'col-lg-5'; // Ajustamos de col-lg-6 a col-lg-5 para dejar espacio al centro
     
     const equipoClase = index === 0 ? 'equipo-alfa' : 'equipo-bravo';
     const colorPrimario = index === 0 ? 'var(--sangre-brillante)' : 'var(--verde-bio)';
     const colorSecundario = index === 0 ? 'var(--sangre-oscuro)' : '#006600';
+    const icono = index === 0 ? '<i class="fas fa-shield-virus me-2"></i>' : '<i class="fas fa-biohazard me-2"></i>';
     
     col.innerHTML = `
-        <div class="equipo-card ${equipoClase}">
-            <div class="equipo-header" style="background: linear-gradient(135deg, ${colorPrimario}, ${colorSecundario});">
-                <h3>${equipo.nombre}</h3>
+        <div class="equipo-card ${equipoClase} shadow-lg border border-secondary border-opacity-25 h-100">
+            <div class="equipo-header d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, ${colorPrimario}, ${colorSecundario}); padding: 12px 18px;">
+                <h3 class="mb-0 text-uppercase fw-bold" style="font-family: 'Russo One', sans-serif; font-size: 1.3rem; letter-spacing: 1px;">
+                    ${icono}${equipo.nombre}
+                </h3>
                 <div class="equipo-stats">
-                    <span class="badge bg-light text-dark">Nivel Total: ${equipo.nivelTotal}</span>
-                    <span class="badge bg-light text-dark">Promedio: ${equipo.nivelPromedio.toFixed(1)}</span>
+                    <!-- Reemplazamos promedio numérico por badge de calibración real del pug -->
+                    <span class="badge bg-warning text-dark px-2 py-1 shadow-sm" style="font-size: 0.65rem; font-weight: 900; letter-spacing: 0.5px;">
+                        <i class="fas fa-spinner fa-spin me-1" style="animation-duration: 3s;"></i> CALIBRANDO
+                    </span>
                 </div>
             </div>
-            <div class="equipo-jugadores">
+            <div class="equipo-jugadores p-3">
                 ${equipo.jugadores.map(jugador => `
-                    <div class="equipo-jugador">
-                        <div class="jugador-avatar-small">
+                    <div class="equipo-jugador bg-dark bg-opacity-25 rounded border border-secondary border-opacity-10 p-2 mb-2 d-flex align-items-center">
+                        <div class="jugador-avatar-small fs-3 me-3">
                             ${getPersonajeEmoji(jugador.personaje)}
                         </div>
-                        <div class="jugador-info-small">
-                            <strong>${jugador.nombre}</strong>
-                            <div class="jugador-nivel">
-                                <span class="badge bg-secondary">Nivel ${jugador.nivel}</span>
-                                <small>${jugador.personaje}</small>
+                        <div class="jugador-info-small flex-grow-1">
+                            <strong class="text-white" style="font-size: 1.1rem; font-family: 'Oswald', sans-serif; letter-spacing: 0.5px;">${jugador.nombre}</strong>
+                            <div class="jugador-nivel mt-0.5">
+                                <span class="badge bg-dark text-white-50 border border-secondary border-opacity-25 py-0.5 px-1.5" style="font-size: 0.65rem; letter-spacing: 0.5px;">
+                                    Rango Provisional
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -686,7 +1028,7 @@ function guardarPartida() {
     partidas.push(partida);
     localStorage.setItem('l4d2_partidas', JSON.stringify(partidas));
     
-    mostrarNotificación('💾 Partida guardada exitosamente', 'success');
+    mostrarNotificacion('💾 Partida guardada exitosamente', 'success');
     reproducirSonido('guardar');
 }
 
@@ -706,7 +1048,7 @@ function exportarJugadores() {
     a.click();
     URL.revokeObjectURL(url);
     
-    mostrarNotificación('📥 Lista de jugadores exportada', 'success');
+    mostrarNotificacion('📥 Lista de jugadores exportada', 'success');
 }
 
 // ===== FUNCIONES DE UI =====
