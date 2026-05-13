@@ -94,16 +94,29 @@
                         </div>
                     </div>
 
-                    <!-- HISTORIAL DE PARTIDAS (VACÍO POR AHORA) -->
+                    <!-- HISTORIAL DE PARTIDAS (DINÁMICO) -->
                     <div class="col-12">
                         <div class="card bg-dark border-secondary border-opacity-25 shadow-sm">
                             <div class="card-header bg-black py-3 d-flex justify-content-between align-items-center">
-                                <h5 class="mb-0 fw-bold text-white"><i class="fas fa-history me-2"></i>Últimos Enfrentamientos</h5>
-                                <span class="badge bg-secondary opacity-75">Próximamente</span>
+                                <h5 class="mb-0 fw-bold text-white"><i class="fas fa-history me-2"></i>Mis Últimos Enfrentamientos</h5>
                             </div>
-                            <div class="card-body text-center py-5">
-                                <i class="fas fa-ghost fa-3x text-muted opacity-25 mb-3"></i>
-                                <p class="text-muted mb-0">No se han registrado partidas recientes aún.</p>
+                            <div class="card-body p-2">
+                                <div id="dashboard-historial-grid">
+                                    <div class="text-center py-4 text-muted">
+                                        <i class="fas fa-spinner fa-spin me-2"></i>Analizando tu historial militar...
+                                    </div>
+                                </div>
+                                
+                                <!-- 📟 CONTROLES DE PAGINACIÓN -->
+                                <div id="historial-pagination" class="d-flex justify-content-between align-items-center mt-3 px-2 pb-1 border-top border-secondary border-opacity-10 pt-2" style="display: none !important;">
+                                    <button id="btn-prev-page" class="btn btn-xs btn-outline-secondary text-uppercase fw-bold" style="font-size: 0.65rem; letter-spacing: 0.5px;">
+                                        <i class="fas fa-chevron-left me-1"></i>Ant.
+                                    </button>
+                                    <span id="page-indicator" class="text-muted small fw-bold" style="font-size: 0.7rem;">PÁG 1 DE 1</span>
+                                    <button id="btn-next-page" class="btn btn-xs btn-outline-secondary text-uppercase fw-bold" style="font-size: 0.65rem; letter-spacing: 0.5px;">
+                                        Sig.<i class="fas fa-chevron-right ms-1"></i>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -113,7 +126,34 @@
         </div>
     </main>
 
-    <!-- SCRIPT LÓGICO DEL DASHBOARD -->
+    <!-- 🛰️ MODAL DE DETALLE DE PARTIDA COMPLETO -->
+    <div class="modal fade" id="modal-detalle-partida" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content bg-dark text-white border border-secondary border-opacity-25 shadow-lg" style="background: #0d0d0d !important;">
+                
+                <!-- Encabezado del Modal -->
+                <div class="modal-header border-secondary border-opacity-10 bg-black">
+                    <h5 class="modal-title fw-bold d-flex align-items-center" id="modal-detalle-title" style="font-family: 'Oswald', sans-serif; letter-spacing: 1px;">
+                        <i class="fas fa-shield-halved text-warning me-2"></i> REPORTE DE BATALLA
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <!-- Cuerpo del Modal -->
+                <div class="modal-body p-0" id="modal-detalle-body" style="max-height: 70vh; overflow-y: auto;">
+                    <!-- El contenido de Versus será inyectado dinámicamente -->
+                </div>
+
+                <!-- Pie del Modal -->
+                <div class="modal-footer border-secondary border-opacity-10 bg-black py-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm px-4 fw-bold" data-bs-dismiss="modal">CERRAR REPORTE</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCRIPTS PRINCIPALES -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
     <script type="module" src="/src/js/dashboard.js"></script>
 </body>
 </html>

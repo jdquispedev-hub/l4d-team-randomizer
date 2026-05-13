@@ -35,62 +35,63 @@ const elementos = {
     skillValue: document.getElementById('skill-value'),
     btnAgregar: document.getElementById('agregar'),
     btnLimpiar: document.getElementById('limpiar'),
-    
+
     // Listas
     jugadoresGrid: document.getElementById('jugadores-grid'),
     jugadoresLista: document.getElementById('jugadores-registrados'),
     colaLista: document.getElementById('cola-jugadores'),
-    
+
     // Botones de cola
     btnIngresar: document.getElementById('ingresar'),
     btnSalirCola: document.getElementById('salir-cola'),
     btnVaciarCola: document.getElementById('vaciar-cola'),
     btnSortear: document.getElementById('sortear'),
     btnSortearRapido: document.getElementById('sortear-rapido'),
-    
+
     // Estadísticas
     totalJugadores: document.getElementById('total-jugadores'),
     colaCount: document.getElementById('cola-count'),
     queueCount: document.getElementById('queue-count'),
     partidasTotales: document.getElementById('partidas-totales'),
     rachaActual: document.getElementById('racha-actual'),
-    
+
     // Resultados
     resultadosSection: document.getElementById('resultados-section'),
     equiposResultados: document.getElementById('equipos-resultados'),
     btnNuevoSorteo: document.getElementById('nuevo-sorteo'),
-    btnGuardarPartida: document.getElementById('guardar-partida'),
-    
+
     // Votación de Mapas
     modalVotacion: document.getElementById('modal-votacion-mapas'),
     containerMapas: document.getElementById('mapas-votacion-container'),
     btnConfirmarMapa: document.getElementById('btn-confirmar-mapa'),
     containerMapaElegido: document.getElementById('mapa-elegido-contenedor'),
-    
+    adminResolvePanel: document.getElementById('admin-resolve-panel'),
+    btnGananSurvs: document.getElementById('btn-ganan-survs'),
+    btnGananInfec: document.getElementById('btn-ganan-infec'),
+
     // Configuración
     autoBalance: document.getElementById('auto-balance'),
-    soundEffects: document.getElementById('sound-effects'),
-    btnExportar: document.getElementById('exportar-jugadores')
+    soundEffects: document.getElementById('sound-effects')
 };
 
 // ===== INICIALIZACIÓN =====
 document.addEventListener('DOMContentLoaded', async () => {
     inicializarEventListeners();
     cargarDatosLocalStorage();
-    
-    // 📡 🚀 NUEVO: Sincronizar y escuchar la cola Realtime desde Supabase
+
+    // 🚀 1º CLAVE: Verificar la identidad del usuario ANTES que nada para prevenir pantallas en blanco
+    await verificarSesionUsuario();
+
+    // 📡 2º Sincronizar y escuchar la cola Realtime desde Supabase
     await cargarColaDesdeSupabase();
     escucharColaEnTiempoReal();
-    
-    // 🎮 NUEVO: Sincronizar partida activa global y conectar receptores de votos
+
+    // 🎮 3º Sincronizar partida activa global y conectar receptores de votos
     await verificarYRestaurarPartidaActiva();
     escucharPartidasEnTiempoReal();
-    
+
     await actualizarInterfaz();
-    
-    // 🚀 NUEVO: Verificar sesión de Supabase
-    await verificarSesionUsuario();
-    
+
     reproducirSonido('inicio');
 });
 
@@ -115,7 +116,7 @@ async function verificarSesionUsuario() {
                 // Guardamos perfil globalmente para usar en la cola
                 usuarioActual = profile;
                 usuarioActual.id = session.user.id; // Necesitamos el ID real
-                
+
                 // Cambiamos el HTML dinámicamente
                 container.innerHTML = `
                     <div class="row align-items-center bg-dark p-4 rounded border border-success" style="background: linear-gradient(135deg, #0a2210 0%, #0a0a0a 100%) !important;">
@@ -163,26 +164,27 @@ function inicializarEventListeners() {
         e.preventDefault();
         agregarJugador();
     });
-    
+
     // Skill slider
     elementos.inputNivel?.addEventListener('input', actualizarSkillDisplay);
-    
+
     // Cola
     elementos.btnIngresar?.addEventListener('click', ingresarACola);
     elementos.btnSalirCola?.addEventListener('click', salirDeCola);
     elementos.btnVaciarCola?.addEventListener('click', vaciarCola);
     elementos.btnSortear?.addEventListener('click', sortearEquipos);
     elementos.btnSortearRapido?.addEventListener('click', sorteoRapido);
-    
+
     // Votación
     elementos.btnConfirmarMapa?.addEventListener('click', finalizarVotacionMapas);
-    
+
     // Resultados
     elementos.btnNuevoSorteo?.addEventListener('click', nuevoSorteo);
-    elementos.btnGuardarPartida?.addEventListener('click', guardarPartida);
-    
-    // Otros
-    elementos.btnExportar?.addEventListener('click', exportarJugadores);
+
+    // Panel de Resolución (Solo el Host de la partida puede declarar al ganador)
+    elementos.btnGananSurvs?.addEventListener('click', () => finalizarPartidaConGanador('Supervivientes'));
+    elementos.btnGananInfec?.addEventListener('click', () => finalizarPartidaConGanador('Infectados'));
+
 }
 
 // ===== FUNCIONES PRINCIPALES =====
@@ -192,17 +194,17 @@ function agregarJugador() {
     const nombre = elementos.inputJugador.value.trim();
     const nivel = parseInt(elementos.inputNivel.value);
     const personaje = elementos.inputPersonaje.value;
-    
+
     if (!nombre) {
         mostrarNotificacion('⚠️ Debes ingresar un nombre de jugador', 'warning');
         return;
     }
-    
+
     if (jugadores.some(j => j.nombre.toLowerCase() === nombre.toLowerCase())) {
         mostrarNotificacion('⚠️ Ese jugador ya está registrado', 'warning');
         return;
     }
-    
+
     const jugador = {
         id: Date.now(),
         nombre,
@@ -210,14 +212,14 @@ function agregarJugador() {
         personaje: personaje || 'No seleccionado',
         fechaRegistro: new Date().toISOString()
     };
-    
+
     jugadores.push(jugador);
     estadisticas.totalJugadores++;
-    
+
     limpiarFormulario();
     actualizarInterfaz();
     guardarDatosLocalStorage();
-    
+
     mostrarNotificacion(`✅ ${nombre} se ha unido a la resistencia!`, 'success');
     reproducirSonido('agregar');
 }
@@ -228,7 +230,7 @@ async function ingresarACola() {
         mostrarNotificacion('⚠️ Debes iniciar sesión para unirte a la cola', 'warning');
         return;
     }
-    
+
     // Verificar límite localmente
     if (colaJugadores.length >= 8) {
         mostrarNotificacion('⚠️ La cola está llena (máximo 8 jugadores)', 'warning');
@@ -272,7 +274,7 @@ async function salirDeCola() {
             .eq('profile_id', usuarioActual.id);
 
         if (error) throw error;
-        
+
         mostrarNotificacion('🚪 Has salido de la cola global', 'info');
     } catch (err) {
         console.error("Error al salir de la cola:", err);
@@ -285,9 +287,9 @@ async function vaciarCola() {
         mostrarNotificacion('⚠️ La cola ya está vacía', 'warning');
         return;
     }
-    
+
     const cantidad = colaJugadores.length;
-    
+
     try {
         // Condición de borrado total seguro para RLS
         const { error } = await supabase
@@ -296,7 +298,7 @@ async function vaciarCola() {
             .neq('id', '00000000-0000-0000-0000-000000000000');
 
         if (error) throw error;
-        
+
         mostrarNotificacion(`🧹 Se vació el lobby (${cantidad} jugadores)`, 'info');
     } catch (err) {
         console.error("Error al vaciar cola en Supabase:", err);
@@ -312,15 +314,15 @@ async function sortearEquipos() {
 
     mostrarNotificacion('🎲 Balanceando y creando partida en la nube...', 'info');
     reproducirSonido('sorteo');
-    
+
     const jugadoresEnCola = [...colaJugadores];
-    
+
     // 1. Mezclar jugadores
     for (let i = jugadoresEnCola.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [jugadoresEnCola[i], jugadoresEnCola[j]] = [jugadoresEnCola[j], jugadoresEnCola[i]];
     }
-    
+
     // 2. Dividir en equipos balanceados temporalmente
     const mitad = Math.ceil(jugadoresEnCola.length / 2);
     const equipoAlfa = jugadoresEnCola.slice(0, mitad);
@@ -365,7 +367,7 @@ async function sortearEquipos() {
         // Guardar estadísticas básicas locales
         estadisticas.partidasTotales++;
         estadisticas.rachaActual++;
-        
+
         // 5. Limpiar a los jugadores elegidos del Lobby global en Supabase
         const idsSorteados = jugadoresEnCola.map(j => j.id);
         await supabase
@@ -374,7 +376,7 @@ async function sortearEquipos() {
             .in('profile_id', idsSorteados);
 
         mostrarNotificacion('🔥 ¡Lobby cerrado! Votación de mapas iniciada globalmente.', 'success');
-        
+
         // El Realtime propagará la inserción a todas las ventanas automáticamente!
 
     } catch (err) {
@@ -398,14 +400,14 @@ function abrirModalVotacionPublico() {
     if (!modalInstance) {
         modalInstance = new bootstrap.Modal(modalElement);
     }
-    
+
     modalInstance.show();
 
     // Configurar el botón "Confirmar Mapa" solo para el administrador que lanzó la partida
     if (elementos.btnConfirmarMapa) {
         const esHost = partidaActiva && partidaActiva.recorded_by === (usuarioActual ? usuarioActual.id : null);
         elementos.btnConfirmarMapa.style.display = esHost ? 'block' : 'none';
-        elementos.btnConfirmarMapa.disabled = false; 
+        elementos.btnConfirmarMapa.disabled = false;
     }
 
     renderizarOpcionesVotacionPublica();
@@ -415,10 +417,10 @@ function abrirModalVotacionPublico() {
 function renderizarOpcionesVotacionPublica() {
     if (!elementos.containerMapas || !opcionesMapasCompletas.length) return;
     elementos.containerMapas.innerHTML = '';
-    
+
     opcionesMapasCompletas.forEach((mapa, index) => {
         const conteoVotos = votosPartida.filter(v => v.map_id === mapa.id).length;
-        
+
         // Analizamos el estado de voto del usuario actual para dar feedback visual
         const yaVoteEsteMapa = usuarioActual ? votosPartida.some(v => v.profile_id === usuarioActual.id && v.map_id === mapa.id) : false;
 
@@ -439,11 +441,11 @@ function renderizarOpcionesVotacionPublica() {
                 </div>
             </div>
         `;
-        
+
         // Asociar eventos de clic
         const card = col.querySelector('.map-vote-card');
         const btnVotar = col.querySelector('.btn-votar');
-        
+
         const logicVoto = async (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -453,10 +455,10 @@ function renderizarOpcionesVotacionPublica() {
                 await registrarVotoEnSupabase(mapa.id);
             }
         };
-        
+
         btnVotar.addEventListener('click', logicVoto);
         card.addEventListener('click', logicVoto);
-        
+
         elementos.containerMapas.appendChild(col);
     });
 }
@@ -472,7 +474,7 @@ async function registrarVotoEnSupabase(mapId) {
     // Opcional: Validar participación activa en los equipos
     const todosLosJugadores = [...equipos[0].jugadores, ...equipos[1].jugadores];
     const soyParticipante = todosLosJugadores.some(p => p.id === usuarioActual.id);
-    
+
     if (!soyParticipante) {
         mostrarNotificacion('⚠️ Espectador: No formas parte de esta partida sorteada', 'warning');
         return;
@@ -509,7 +511,7 @@ async function finalizarVotacionMapas() {
     // 1. Sumarizar votos acumulados en caché
     const recuento = {};
     opcionesMapasCompletas.forEach(m => recuento[m.id] = 0);
-    
+
     votosPartida.forEach(v => {
         if (recuento[v.map_id] !== undefined) {
             recuento[v.map_id]++;
@@ -582,13 +584,13 @@ async function verificarYRestaurarPartidaActiva() {
 
         if (active) {
             partidaActiva = active;
-            
+
             // Reconstruimos el array estructurado clásico para visualización
             equipos = [
                 { nombre: 'Supervivientes', jugadores: active.team_alfa || [] },
                 { nombre: 'Infectados', jugadores: active.team_bravo || [] }
             ];
-            
+
             // Calcular estadísticas
             equipos.forEach(eq => {
                 eq.nivelTotal = eq.jugadores.reduce((sum, j) => sum + (j.nivel || 1000), 0);
@@ -601,7 +603,7 @@ async function verificarYRestaurarPartidaActiva() {
                 .from('maps')
                 .select('*')
                 .in('id', candIds);
-            
+
             if (errMaps) throw errMaps;
             opcionesMapasCompletas = rawMaps || [];
 
@@ -622,11 +624,10 @@ async function verificarYRestaurarPartidaActiva() {
         } else {
             // 🛡️ CIERRE ABSOLUTO DE EMERGENCIA DEL MODAL PARA TODOS
             forzarCerrarModalVotacion();
-            
-            if (partidaActiva) {
-                partidaActiva = null;
-                await cargarUltimaPartidaGanada();
-            }
+
+            // 🚀 NUEVO: Intentamos recuperar la partida en fase 'playing' (en juego) para pintar los
+            // resultados en pantalla. ¡Esto soluciona las recargas accidentales y activa el Panel de Host!
+            await cargarUltimaPartidaGanada();
         }
     } catch (err) {
         console.error("Error sincronizando estado de partida:", err);
@@ -671,12 +672,21 @@ function escucharPartidasEnTiempoReal() {
             }
         })
         .subscribe();
+
+    // Canal Perfiles - 🚀 NUEVO: Refresca los MMR y Rangos en VIVO para todos los monitores!
+    supabase
+        .channel('live-profiles')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, async () => {
+            console.log('📡 Cambio en perfiles detectado. Recargando ranking en vivo...');
+            await actualizarJugadoresGrid();
+        })
+        .subscribe();
 }
 
 // ⏲️ TEMPORIZADOR SÚPER PRECIOSO SINCRONIZADO AL TIEMPO DEL SERVIDOR
 function iniciarCuentaAtrasVisual() {
     if (intervalCuentaAtras) clearInterval(intervalCuentaAtras);
-    
+
     const spanReloj = document.getElementById('modal-timer-display');
     if (!spanReloj || !partidaActiva) return;
 
@@ -759,6 +769,8 @@ async function cargarUltimaPartidaGanada() {
         if (error) throw error;
 
         if (game) {
+            partidaActiva = game; // 🚀 CLAVE: Asignamos a la global para que 'mostrarResultados' sepa quién es el Host
+
             equipos = [
                 { nombre: 'Supervivientes', jugadores: game.team_alfa || [] },
                 { nombre: 'Infectados', jugadores: game.team_bravo || [] }
@@ -769,8 +781,15 @@ async function cargarUltimaPartidaGanada() {
                 eq.nivelPromedio = eq.nivelTotal / (eq.jugadores.length || 1);
             });
 
-            mapaSeleccionado = game.maps; 
+            mapaSeleccionado = game.maps;
             mostrarResultados();
+        } else {
+            // 🚀 NUEVO: Si no hay partida activa ('playing'), ocultamos forzadamente los resultados
+            // para que a todos los usuarios en vivo se les limpie la pantalla al mismo tiempo!
+            partidaActiva = null;
+            if (elementos.resultadosSection) {
+                elementos.resultadosSection.style.display = 'none';
+            }
         }
     } catch (err) {
         console.error("Error cargando resolución final de partida:", err);
@@ -825,8 +844,8 @@ function escucharColaEnTiempoReal() {
     supabase
         .channel('lobby-realtime')
         .on(
-            'postgres_changes', 
-            { event: '*', schema: 'public', table: 'lobby_queue' }, 
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'lobby_queue' },
             async (payload) => {
                 console.log('📡 Cambio detectado en lobby global:', payload.eventType);
                 // Cuando alguien entra, sale o se limpia la cola, recargamos la cola para todos
@@ -842,27 +861,27 @@ async function sorteoRapido() {
         mostrarNotificacion('⚠️ Registra al menos 4 jugadores para probar el sorteo rápido', 'warning');
         return;
     }
-    
+
     mostrarNotificacion('⚡ Rellenando lobby global...', 'info');
-    
+
     try {
         // 1. Identificamos jugadores que NO estén actualmente en la cola
         const disponibles = jugadores.filter(j => !colaJugadores.some(c => c.id === j.id));
-        
+
         // 2. Calculamos cuántos cupos libres quedan (máximo 8)
         const cuposLibres = 8 - colaJugadores.length;
-        
+
         if (cuposLibres <= 0) {
             // Si ya estaba lleno, simplemente sorteamos directamente
             sortearEquipos();
             return;
         }
-        
+
         // 3. Seleccionamos perfiles aleatorios
         const elegidos = [...disponibles]
             .sort(() => 0.5 - Math.random())
             .slice(0, cuposLibres);
-            
+
         if (elegidos.length === 0 && colaJugadores.length < 4) {
             mostrarNotificacion('⚠️ No hay suficientes perfiles en base de datos para completar 4', 'warning');
             return;
@@ -874,10 +893,10 @@ async function sorteoRapido() {
             const { error } = await supabase
                 .from('lobby_queue')
                 .insert(inserts);
-                
+
             if (error) throw error;
         }
-        
+
         // 5. Esperamos un brevísimo instante para que el evento realtime actualice e invocamos
         setTimeout(() => sortearEquipos(), 800);
 
@@ -891,7 +910,7 @@ async function sorteoRapido() {
 function mostrarResultados() {
     elementos.resultadosSection.style.display = 'block';
     elementos.equiposResultados.innerHTML = '';
-    
+
     // 1. Limpiamos contenedor clásico de banner (ahora irá al centro en el círculo)
     if (elementos.containerMapaElegido) {
         elementos.containerMapaElegido.innerHTML = '';
@@ -902,10 +921,10 @@ function mostrarResultados() {
     // 2. Calcular Predicción / Probabilidades Matemáticas de victoria (Algoritmo Elo simplificado)
     const eq1 = equipos[0];
     const eq2 = equipos[1];
-    
+
     const avg1 = eq1.jugadores.reduce((sum, j) => sum + (j.nivel || 1000), 0) / (eq1.jugadores.length || 1);
     const avg2 = eq2.jugadores.reduce((sum, j) => sum + (j.nivel || 1000), 0) / (eq2.jugadores.length || 1);
-    
+
     // Calculamos el Elo rating probability
     const probA = 1 / (1 + Math.pow(10, (avg2 - avg1) / 400));
     const percentA = Math.round(probA * 100);
@@ -918,7 +937,7 @@ function mostrarResultados() {
     // 4. Fabricar el Centro de Colisión VERSUS (col-lg-2)
     const colCentro = document.createElement('div');
     colCentro.className = 'col-lg-2 d-flex align-items-center justify-content-center py-3';
-    
+
     const urlMapa = mapaSeleccionado ? mapaSeleccionado.image_url : 'https://images.alphacoders.com/105/thumb-1920-105187.jpg';
     const nombreMapa = mapaSeleccionado ? mapaSeleccionado.name : 'Campaña Aleatoria';
 
@@ -953,21 +972,81 @@ function mostrarResultados() {
     elementos.equiposResultados.appendChild(colIzq);
     elementos.equiposResultados.appendChild(colCentro);
     elementos.equiposResultados.appendChild(colDer);
-    
+
+    // 5. MOSTRAR PANEL DE RESOLUCIÓN DE GANADOR (Exclusivo del creador/Host de la partida)
+    if (elementos.adminResolvePanel) {
+        const esHost = partidaActiva && partidaActiva.recorded_by === (usuarioActual ? usuarioActual.id : null);
+        // Solo se muestra si está en fase 'playing' (jugando), no si ya está finalizada
+        const estaEnJuego = partidaActiva && partidaActiva.status === 'playing';
+
+        if (esHost && estaEnJuego) {
+            elementos.adminResolvePanel.style.display = 'block';
+            // Reactivamos botones en caso de que vinieran deshabilitados de un error previo
+            if (elementos.btnGananSurvs) elementos.btnGananSurvs.disabled = false;
+            if (elementos.btnGananInfec) elementos.btnGananInfec.disabled = false;
+        } else {
+            elementos.adminResolvePanel.style.display = 'none';
+        }
+    }
+
     // Scroll fluido a resultados
     elementos.resultadosSection.scrollIntoView({ behavior: 'smooth' });
+}
+
+// 🏆 FINALIZA LA PARTIDA LLAMANDO AL MOTOR RPC DE SUPABASE PARA RECALCULAR MMR
+async function finalizarPartidaConGanador(ganadorNombre) {
+    if (!partidaActiva) return;
+
+    // Confirmación preventiva
+    const seguro = confirm(`⚠️ ¿Confirmas la victoria de: ${ganadorNombre.toUpperCase()}?\n\nEsto actualizará automáticamente el MMR de los 8 jugadores involucrados y cerrará la sesión.`);
+    if (!seguro) return;
+
+    mostrarNotificacion('⚙️ Conectando con el motor de MMR...', 'info');
+
+    try {
+        // Desactivamos botones para evitar clicks repetidos (anti-cheat/flood)
+        if (elementos.btnGananSurvs) elementos.btnGananSurvs.disabled = true;
+        if (elementos.btnGananInfec) elementos.btnGananInfec.disabled = true;
+
+        // Llamamos al Procedimiento Almacenado Atómico en PostgreSQL
+        const { error } = await supabase.rpc('resolver_partida', {
+            match_id_param: partidaActiva.id,
+            ganador_param: ganadorNombre
+        });
+
+        if (error) throw error;
+
+        mostrarNotificacion(`🏆 ¡Partida Guardada! Felicitaciones a ${ganadorNombre}`, 'success');
+
+        // Ocultamos panel de resolución local
+        if (elementos.adminResolvePanel) elementos.adminResolvePanel.style.display = 'none';
+
+        // Limpiamos partida activa ya que terminó
+        partidaActiva = null;
+
+        // Recargamos el grid de clasificación de jugadores y la UI en vivo!
+        await actualizarInterfaz();
+
+    } catch (err) {
+        console.error("Error al finalizar partida en DB:", err);
+        mostrarNotificacion('❌ Falló la transacción en el servidor', 'danger');
+
+        // Si falla, reactivamos botones para reintentar
+        if (elementos.btnGananSurvs) elementos.btnGananSurvs.disabled = false;
+        if (elementos.btnGananInfec) elementos.btnGananInfec.disabled = false;
+    }
 }
 
 // Crear card de equipo optimizada para el versus lateral
 function crearEquipoCard(equipo, index) {
     const col = document.createElement('div');
     col.className = 'col-lg-5'; // Ajustamos de col-lg-6 a col-lg-5 para dejar espacio al centro
-    
+
     const equipoClase = index === 0 ? 'equipo-alfa' : 'equipo-bravo';
     const colorPrimario = index === 0 ? 'var(--sangre-brillante)' : 'var(--verde-bio)';
     const colorSecundario = index === 0 ? 'var(--sangre-oscuro)' : '#006600';
     const icono = index === 0 ? '<i class="fas fa-shield-virus me-2"></i>' : '<i class="fas fa-biohazard me-2"></i>';
-    
+
     col.innerHTML = `
         <div class="equipo-card ${equipoClase} shadow-lg border border-secondary border-opacity-25 h-100">
             <div class="equipo-header d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, ${colorPrimario}, ${colorSecundario}); padding: 12px 18px;">
@@ -1000,80 +1079,128 @@ function crearEquipoCard(equipo, index) {
             </div>
         </div>
     `;
-    
+
     return col;
 }
 
-// Nuevo sorteo
-function nuevoSorteo() {
+// Nuevo sorteo global sincronizado
+async function nuevoSorteo() {
+    // 🚀 NUEVO: Si hay una partida activa, la cancelamos en Supabase para que
+    // el Realtime le avise instantáneamente a todos tus amigos y les borre su pantalla!
+    if (partidaActiva) {
+        try {
+            await supabase
+                .from('matches')
+                .update({ status: 'canceled' })
+                .eq('id', partidaActiva.id);
+        } catch (err) {
+            console.warn("Error cancelando sesión anterior:", err);
+        }
+        partidaActiva = null;
+    }
+
     elementos.resultadosSection.style.display = 'none';
     colaJugadores = [];
     mapaSeleccionado = null; // Reseteamos el mapa seleccionado
     if (elementos.containerMapaElegido) elementos.containerMapaElegido.innerHTML = '';
+    if (elementos.adminResolvePanel) elementos.adminResolvePanel.style.display = 'none';
+
     actualizarInterfaz();
     guardarDatosLocalStorage();
-    mostrarNotificacion('🔄 Preparando nuevo sorteo...', 'info');
-}
-
-// Guardar partida
-function guardarPartida() {
-    const partida = {
-        id: Date.now(),
-        fecha: new Date().toISOString(),
-        equipos: equipos,
-        estadisticas: estadisticas
-    };
-    
-    let partidas = JSON.parse(localStorage.getItem('l4d2_partidas') || '[]');
-    partidas.push(partida);
-    localStorage.setItem('l4d2_partidas', JSON.stringify(partidas));
-    
-    mostrarNotificacion('💾 Partida guardada exitosamente', 'success');
-    reproducirSonido('guardar');
-}
-
-// Exportar jugadores
-function exportarJugadores() {
-    const datos = {
-        jugadores: jugadores,
-        estadisticas: estadisticas,
-        fechaExportacion: new Date().toISOString()
-    };
-    
-    const blob = new Blob([JSON.stringify(datos, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `l4d2_jugadores_${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    
-    mostrarNotificacion('📥 Lista de jugadores exportada', 'success');
+    mostrarNotificacion('🔄 Preparando nuevo sorteo global...', 'info');
 }
 
 // ===== FUNCIONES DE UI =====
 
 // Actualizar interfaz
 async function actualizarInterfaz() {
-    actualizarEstadisticas();
+    await actualizarEstadisticas();
     await actualizarJugadoresGrid();
     actualizarCola();
     actualizarBotones();
 }
 
-// Actualizar estadísticas
-function actualizarEstadisticas() {
+// 🚀 NUEVO: Calcular la racha real de victorias consecutivas del usuario desde Supabase
+async function calcularRachaActual(userId) {
+    if (!userId) return 0;
+    try {
+        const { data, error } = await supabase
+            .from('matches')
+            .select('team_alfa, team_bravo, winner_team')
+            .eq('status', 'finished')
+            .order('created_at', { ascending: false })
+            .limit(50); // Tomamos muestra de las últimas 50 partidas
+
+        if (error) throw error;
+        if (!data || data.length === 0) return 0;
+
+        let racha = 0;
+        for (const partida of data) {
+            const enAlfa = (partida.team_alfa || []).some(p => p.id === userId);
+            const enBravo = (partida.team_bravo || []).some(p => p.id === userId);
+
+            if (!enAlfa && !enBravo) {
+                continue; // Si no jugó esta partida, saltarla
+            }
+
+            // Validar victoria
+            const gano = (enAlfa && partida.winner_team === 'Supervivientes') || 
+                         (enBravo && partida.winner_team === 'Infectados');
+
+            if (gano) {
+                racha++;
+            } else {
+                break; // A la primera derrota o empate, la racha consecutiva se detiene
+            }
+        }
+        return racha;
+    } catch (err) {
+        console.warn("Error calculando racha de victorias:", err);
+        return 0;
+    }
+}
+
+// Actualizar estadísticas desde la nube en vivo!
+async function actualizarEstadisticas() {
     elementos.totalJugadores.textContent = jugadores.length;
     elementos.colaCount.textContent = colaJugadores.length;
     elementos.queueCount.textContent = `${colaJugadores.length}/8`;
-    elementos.partidasTotales.textContent = estadisticas.partidasTotales;
-    elementos.rachaActual.textContent = estadisticas.rachaActual;
+    
+    try {
+        // 🚀 NUEVO: Sincronizar el conteo real de partidas jugadas en la nube
+        const { count, error } = await supabase
+            .from('matches')
+            .select('*', { count: 'exact', head: true })
+            .eq('status', 'finished');
+
+        if (!error && count !== null) {
+            elementos.partidasTotales.textContent = count;
+            estadisticas.partidasTotales = count; // Guardar localmente como fallback
+        } else {
+            elementos.partidasTotales.textContent = estadisticas.partidasTotales;
+        }
+    } catch (err) {
+        console.warn("Usando fallback local de estadísticas:", err);
+        elementos.partidasTotales.textContent = estadisticas.partidasTotales;
+    }
+
+    // 🚀 NUEVO: Calcular y pintar la racha real del usuario autenticado en vivo!
+    const pLabel = elementos.rachaActual?.nextElementSibling;
+    
+    if (usuarioActual) {
+        const racha = await calcularRachaActual(usuarioActual.id);
+        elementos.rachaActual.textContent = racha;
+        if (pLabel) pLabel.textContent = "Mi Racha 🔥";
+    } else {
+        elementos.rachaActual.textContent = "-";
+        if (pLabel) pLabel.textContent = "Racha Actual";
+    }
 }
 
 // Actualizar grid de jugadores desde Supabase
 async function actualizarJugadoresGrid() {
     if (!elementos.jugadoresGrid) return;
-    
+
     try {
         // Obtenemos jugadores reales, ordenados por MMR de mayor a menor
         const { data: players, error } = await supabase
@@ -1109,7 +1236,7 @@ async function actualizarJugadoresGrid() {
             `;
             return;
         }
-        
+
         // Renderizado real
         elementos.jugadoresGrid.innerHTML = players.map(p => {
             // Lógica de Ocultar MMR si < 10 partidas
@@ -1123,11 +1250,14 @@ async function actualizarJugadoresGrid() {
                             ${getPersonajeEmoji(p.avatar_url || 'No seleccionado')}
                         </div>
                         <div class="player-info">
-                            <h5 class="player-name fw-bold">${p.username}</h5>
-                            <div class="player-stats">
-                                <span class="badge ${badgeColor} fs-6">MMR: ${mmrDisplay}</span>
-                                <span class="badge bg-dark small">${p.games_played}/10 PJ</span>
-                                ${colaJugadores.some(c => c.id === p.id) ? '<span class="badge bg-success ms-1">EN COLA</span>' : ''}
+                            <h5 class="player-name fw-bold mb-1">${p.username}</h5>
+                            <div class="mb-2">
+                                ${obtenerRangoBadge(p.mmr || 1000, p.games_played || 0)}
+                            </div>
+                            <div class="player-stats mt-1">
+                                <span class="badge ${badgeColor} fs-6 shadow-sm">MMR: ${mmrDisplay}</span>
+                                <span class="badge bg-dark border border-secondary border-opacity-25 small ms-1">${p.games_played}/10 PJ</span>
+                                ${colaJugadores.some(c => c.id === p.id) ? '<span class="badge bg-success ms-1 animate__animated animate__flash animate__infinite">EN COLA</span>' : ''}
                             </div>
                         </div>
                     </div>
@@ -1144,7 +1274,7 @@ async function actualizarJugadoresGrid() {
 // Actualizar cola
 function actualizarCola() {
     if (!elementos.colaLista) return;
-    
+
     if (colaJugadores.length === 0) {
         elementos.colaLista.innerHTML = `
             <li class="queue-item empty">
@@ -1154,7 +1284,7 @@ function actualizarCola() {
         `;
         return;
     }
-    
+
     elementos.colaLista.innerHTML = colaJugadores.map((jugador, index) => {
         // Lógica de Ocultar MMR en Cola si está calibrando
         const mmrCola = jugador.games_played < 10 ? 'Calibrando' : jugador.nivel;
@@ -1172,11 +1302,11 @@ function actualizarBotones() {
     if (elementos.btnSortear) {
         elementos.btnSortear.disabled = colaJugadores.length < 4;
     }
-    
+
     if (elementos.btnSalirCola) {
         elementos.btnSalirCola.disabled = colaJugadores.length === 0;
     }
-    
+
     if (elementos.btnVaciarCola) {
         elementos.btnVaciarCola.disabled = colaJugadores.length === 0;
     }
@@ -1186,7 +1316,7 @@ function actualizarBotones() {
 function actualizarSkillDisplay() {
     const valor = elementos.inputNivel.value;
     elementos.skillValue.textContent = valor;
-    
+
     // Cambiar color según nivel
     elementos.skillValue.className = 'skill-value badge fs-6';
     if (valor <= 3) {
@@ -1229,7 +1359,7 @@ function mostrarNotificacion(mensaje, tipo = 'info') {
             ${mensaje}
         </div>
     `;
-    
+
     // Estilos
     notificacion.style.cssText = `
         position: fixed;
@@ -1246,9 +1376,9 @@ function mostrarNotificacion(mensaje, tipo = 'info') {
         max-width: 300px;
         animation: slideInRight 0.3s ease;
     `;
-    
+
     document.body.appendChild(notificacion);
-    
+
     // Remover después de 3 segundos
     setTimeout(() => {
         notificacion.style.animation = 'slideOutRight 0.3s ease';
@@ -1274,7 +1404,7 @@ function getNotificacionColor(tipo) {
 // Reproducir sonido (simulado)
 function reproducirSonido(tipo) {
     if (!elementos.soundEffects?.checked) return;
-    
+
     // Aquí podrías agregar sonidos reales
     console.log(`🔊 Reproduciendo sonido: ${tipo}`);
 }
@@ -1394,3 +1524,66 @@ estilosDinamicos.textContent = `
 `;
 
 document.head.appendChild(estilosDinamicos);
+
+// 🏅 SISTEMA DE RANGOS COMUNITARIO - ESCALA DE 400 PTS (3K+)
+function obtenerRangoBadge(mmr, gamesPlayed) {
+    if (gamesPlayed < 10) {
+        return `<span class="badge bg-dark text-white-50 border border-secondary border-opacity-25 py-1" style="font-size:0.65rem; letter-spacing:0.5px; font-weight:bold;">
+            <i class="fas fa-spinner fa-spin me-1"></i>CALIBRANDO...
+        </span>`;
+    }
+
+    let text = "";
+    let style = "";
+    let icon = "";
+
+    // Distribución de Liga Oficial en intervalos de 400 pts
+    if (mmr < 750) {
+        text = "Desinstala el Juego 🗑️";
+        style = "background: #1a1a1a; border: 1px solid #ff0000; color: #ff4444; text-decoration: line-through;";
+        icon = '<i class="fas fa-trash-alt me-1"></i>';
+    } else if (mmr < 1000) {
+        text = "Imán de Boomer 💥";
+        style = "background: linear-gradient(90deg, #332200, #553300); border: 1px solid #885500; color: #cca300;";
+        icon = '<i class="fas fa-biohazard me-1"></i>';
+    } else if (mmr < 1400) {
+        text = "Pan con Zombie 🍞";
+        style = "background: linear-gradient(90deg, #5d4037, #8d6e63); border: 1px solid #3e2723; color: #ffffff;";
+        icon = '<i class="fas fa-bread-slice me-1"></i>';
+    } else if (mmr < 1800) {
+        text = "Novio de la Witch 👵";
+        style = "background: linear-gradient(90deg, #7f0000, #b71c1c); border: 1px solid #ff1744; color: #ffffff;";
+        icon = '<i class="fas fa-hand-holding-heart me-1"></i>';
+    } else if (mmr < 2200) {
+        text = "Camina y Muere 💀";
+        style = "background: linear-gradient(90deg, #37474f, #455a64); border: 1px solid #cfd8dc; color: #eceff1;";
+        icon = '<i class="fas fa-skull-crossbones me-1"></i>';
+    } else if (mmr < 2600) {
+        text = "Rusheador Crónico 🏃‍♂️";
+        style = "background: linear-gradient(90deg, #e65100, #ff9800); border: 1px solid #ff5722; color: #ffffff;";
+        icon = '<i class="fas fa-running me-1"></i>';
+    } else if (mmr < 3000) {
+        text = "Esquiva-Rocas 🗿";
+        style = "background: linear-gradient(90deg, #424242, #616161); border: 2px solid #00e5ff; color: #e0f7fa; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4);";
+        icon = '<i class="fas fa-mountain me-1"></i>';
+    } else {
+        text = "Papeador Legendario 👑";
+        style = "background: linear-gradient(135deg, #ffd700, #ff9800); border: 2px solid #ffffff; color: #000000; font-weight: 900; box-shadow: 0 0 15px rgba(255, 215, 0, 0.8); animation: pulse-gloria 2s infinite;";
+        icon = '<i class="fas fa-crown me-1"></i>';
+    }
+
+    return `<span class="badge d-inline-flex align-items-center" style="font-size: 0.7rem; text-transform: uppercase; padding: 5px 10px; border-radius: 4px; font-family: 'Russo One', sans-serif; letter-spacing: 0.5px; ${style}">
+        ${icon}${text}
+    </span>`;
+}
+
+// Agregar animación de brillo y escala para el rango supremo
+const styleGloria = document.createElement('style');
+styleGloria.textContent = `
+    @keyframes pulse-gloria {
+        0% { transform: scale(1); box-shadow: 0 0 5px rgba(255, 215, 0, 0.6); }
+        50% { transform: scale(1.03); box-shadow: 0 0 20px rgba(255, 215, 0, 1); }
+        100% { transform: scale(1); box-shadow: 0 0 5px rgba(255, 215, 0, 0.6); }
+    }
+`;
+document.head.appendChild(styleGloria);
