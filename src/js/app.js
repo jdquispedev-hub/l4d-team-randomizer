@@ -14,6 +14,11 @@ let estadisticas = {
 // ESTADO DE SESIÓN
 let usuarioActual = null;
 
+// ESTADO DE VOTACIÓN DE MAPAS
+let opcionesMapas = [];
+let votosMapas = [0, 0, 0];
+let mapaSeleccionado = null;
+
 // ===== ELEMENTOS DEL DOM =====
 const elementos = {
     // Formulario
@@ -50,6 +55,12 @@ const elementos = {
     btnNuevoSorteo: document.getElementById('nuevo-sorteo'),
     btnGuardarPartida: document.getElementById('guardar-partida'),
     
+    // Votación de Mapas
+    modalVotacion: document.getElementById('modal-votacion-mapas'),
+    containerMapas: document.getElementById('mapas-votacion-container'),
+    btnConfirmarMapa: document.getElementById('btn-confirmar-mapa'),
+    containerMapaElegido: document.getElementById('mapa-elegido-contenedor'),
+    
     // Configuración
     autoBalance: document.getElementById('auto-balance'),
     soundEffects: document.getElementById('sound-effects'),
@@ -60,7 +71,12 @@ const elementos = {
 document.addEventListener('DOMContentLoaded', async () => {
     inicializarEventListeners();
     cargarDatosLocalStorage();
-    actualizarInterfaz();
+    
+    // 📡 🚀 NUEVO: Sincronizar y escuchar la cola Realtime desde Supabase
+    await cargarColaDesdeSupabase();
+    escucharColaEnTiempoReal();
+    
+    await actualizarInterfaz();
     
     // 🚀 NUEVO: Verificar sesión de Supabase
     await verificarSesionUsuario();
@@ -148,6 +164,9 @@ function inicializarEventListeners() {
     elementos.btnSortear?.addEventListener('click', sortearEquipos);
     elementos.btnSortearRapido?.addEventListener('click', sorteoRapido);
     
+    // Votación
+    elementos.btnConfirmarMapa?.addEventListener('click', finalizarVotacionMapas);
+    
     // Resultados
     elementos.btnNuevoSorteo?.addEventListener('click', nuevoSorteo);
     elementos.btnGuardarPartida?.addEventListener('click', guardarPartida);
@@ -193,77 +212,91 @@ function agregarJugador() {
     reproducirSonido('agregar');
 }
 
-// Ingresar a cola
+// Ingresar a cola global (Supabase)
 async function ingresarACola() {
-    // Si no hemos verificado sesión aún, intentamos una vez
     if (!usuarioActual) {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-            mostrarNotificacion('⚠️ Debes iniciar sesión para unirte a la cola', 'warning');
-            return;
-        }
-        // Si hay sesión pero no perfil, la función verificarSesionUsuario debería encargarse, esperamos.
-        mostrarNotificacion('⚠️ Cargando datos de tu cuenta...', 'info');
+        mostrarNotificacion('⚠️ Debes iniciar sesión para unirte a la cola', 'warning');
         return;
     }
     
+    // Verificar límite localmente
     if (colaJugadores.length >= 8) {
         mostrarNotificacion('⚠️ La cola está llena (máximo 8 jugadores)', 'warning');
         return;
     }
-    
-    // Adaptamos el perfil a la estructura que espera la cola
-    const jugadorCola = {
-        id: usuarioActual.id,
-        nombre: usuarioActual.username,
-        nivel: usuarioActual.mmr || 1000, // Usamos MMR real
-        games_played: usuarioActual.games_played || 0,
-        personaje: 'No seleccionado'
-    };
 
-    // Validar si ya está adentro
-    if (!colaJugadores.some(j => j.id === jugadorCola.id)) {
-        colaJugadores.push(jugadorCola);
-        actualizarInterfaz();
-        guardarDatosLocalStorage(); // Mantenemos cola en local por ahora
-        mostrarNotificacion(`🎯 ${jugadorCola.nombre} ingresó a la cola`, 'info');
-        reproducirSonido('cola');
-    } else {
-        mostrarNotificacion('⚠️ Ya estás en la cola de espera', 'warning');
+    try {
+        // Insertar en la tabla global de Supabase
+        const { error } = await supabase
+            .from('lobby_queue')
+            .insert([{ profile_id: usuarioActual.id }]);
+
+        if (error) {
+            // Violación de clave única (ya está en la cola)
+            if (error.code === '23505') {
+                mostrarNotificacion('⚠️ Ya estás dentro de la cola global', 'warning');
+            } else {
+                throw error;
+            }
+        } else {
+            mostrarNotificacion('🎯 Te has unido al Lobby global!', 'success');
+            reproducirSonido('cola');
+        }
+    } catch (err) {
+        console.error("Error al ingresar a la cola:", err);
+        mostrarNotificacion('❌ Error al unirte a la cola en la base de datos', 'danger');
     }
 }
 
-// Salir de cola
-function salirDeCola() {
-    if (colaJugadores.length === 0) {
-        mostrarNotificacion('⚠️ No hay jugadores en la cola', 'warning');
+// Salir de la cola global (Supabase)
+async function salirDeCola() {
+    if (!usuarioActual) {
+        mostrarNotificacion('⚠️ Debes estar conectado para salir de la cola', 'warning');
         return;
     }
-    
-    const jugadorSalida = colaJugadores.pop();
-    actualizarInterfaz();
-    guardarDatosLocalStorage();
-    mostrarNotificacion(`🚪 ${jugadorSalida.nombre} salió de la cola`, 'info');
+
+    try {
+        const { error } = await supabase
+            .from('lobby_queue')
+            .delete()
+            .eq('profile_id', usuarioActual.id);
+
+        if (error) throw error;
+        
+        mostrarNotificacion('🚪 Has salido de la cola global', 'info');
+    } catch (err) {
+        console.error("Error al salir de la cola:", err);
+    }
 }
 
-// Vaciar cola
-function vaciarCola() {
+// Vaciar cola global (Supabase)
+async function vaciarCola() {
     if (colaJugadores.length === 0) {
         mostrarNotificacion('⚠️ La cola ya está vacía', 'warning');
         return;
     }
     
     const cantidad = colaJugadores.length;
-    colaJugadores = [];
-    actualizarInterfaz();
-    guardarDatosLocalStorage();
-    mostrarNotificacion(`🧹 Se vació la cola (${cantidad} jugadores)`, 'info');
+    
+    try {
+        // Condición de borrado total seguro para RLS
+        const { error } = await supabase
+            .from('lobby_queue')
+            .delete()
+            .neq('id', '00000000-0000-0000-0000-000000000000');
+
+        if (error) throw error;
+        
+        mostrarNotificacion(`🧹 Se vació el lobby (${cantidad} jugadores)`, 'info');
+    } catch (err) {
+        console.error("Error al vaciar cola en Supabase:", err);
+    }
 }
 
 // Sortear equipos
 function sortearEquipos() {
     if (colaJugadores.length < 4) {
-        mostrarNotificación('⚠️ Se necesitan al menos 4 jugadores para sortear', 'warning');
+        mostrarNotificacion('⚠️ Se necesitan al menos 4 jugadores para sortear', 'warning');
         return;
     }
     
@@ -291,32 +324,271 @@ function sortearEquipos() {
     estadisticas.partidasTotales++;
     estadisticas.rachaActual++;
     
-    mostrarResultados();
+    // 📡 NUEVO: Al sortear, limpiamos los jugadores que acaban de entrar de la cola global
+    const idsSorteados = jugadoresEnCola.map(j => j.id);
+    supabase.from('lobby_queue').delete().in('profile_id', idsSorteados).then(({ error }) => {
+        if (error) console.error("Error limpiando la cola tras el sorteo:", error);
+    });
+    
+    // Iniciar votación de mapas en vez de mostrar resultados inmediatamente
+    iniciarVotacionMapas();
     guardarDatosLocalStorage();
     
-    mostrarNotificacion('🎲 ¡Equipos sorteados con éxito!', 'success');
+    mostrarNotificacion('🎲 ¡Equipos sorteados! Abriendo votación de mapas...', 'success');
     reproducirSonido('sorteo');
 }
 
-// Sorteo rápido
-function sorteoRapido() {
-    // Agregar jugadores aleatorios a la cola si es necesario
-    while (colaJugadores.length < 8 && jugadores.length > colaJugadores.length) {
-        const jugadoresDisponibles = jugadores.filter(j => !colaJugadores.some(c => c.id === j.id));
-        if (jugadoresDisponibles.length > 0) {
-            const jugadorAleatorio = jugadoresDisponibles[Math.floor(Math.random() * jugadoresDisponibles.length)];
-            colaJugadores.push(jugadorAleatorio);
-        } else {
-            break;
-        }
+// ===== VOTACIÓN DE MAPAS =====
+
+// Iniciar votación de mapas consultando Supabase
+async function iniciarVotacionMapas() {
+    if (!elementos.containerMapas) return;
+    
+    elementos.containerMapas.innerHTML = `
+        <div class="col-12 text-center text-warning py-5">
+            <div class="spinner-border text-danger me-2" role="status"></div> 
+            Cargando mapas oficiales desde Supabase...
+        </div>
+    `;
+    
+    if (elementos.btnConfirmarMapa) elementos.btnConfirmarMapa.disabled = true;
+    votosMapas = [0, 0, 0];
+    mapaSeleccionado = null;
+
+    // Abrir modal programáticamente usando Bootstrap JS cargado en index.html
+    const modalElement = document.getElementById('modal-votacion-mapas');
+    if (!modalElement) {
+        mostrarResultados();
+        return;
     }
     
-    actualizarInterfaz();
+    const modalInstance = new bootstrap.Modal(modalElement);
+    modalInstance.show();
+
+    try {
+        // Obtenemos los mapas disponibles
+        const { data: maps, error } = await supabase
+            .from('maps')
+            .select('*');
+        
+        if (error) throw error;
+        
+        if (!maps || maps.length === 0) {
+            throw new Error("No se encontraron mapas en la base de datos.");
+        }
+
+        // Elegir 3 mapas al azar sin repetir
+        const mezclados = [...maps].sort(() => 0.5 - Math.random());
+        opcionesMapas = mezclados.slice(0, Math.min(3, mezclados.length));
+
+        renderizarOpcionesVotacion();
+    } catch (err) {
+        console.error("Error al cargar mapas de Supabase:", err);
+        mostrarNotificacion("⚠️ No se pudieron cargar los mapas de la DB.", "danger");
+        
+        // Cerrar modal y saltar votación en caso de fallo extrema
+        setTimeout(() => {
+            const modal = bootstrap.Modal.getInstance(modalElement);
+            if (modal) modal.hide();
+            mostrarResultados();
+        }, 1500);
+    }
+}
+
+// Renderizar las 3 cartas de mapas en el modal
+function renderizarOpcionesVotacion() {
+    if (!elementos.containerMapas) return;
+    elementos.containerMapas.innerHTML = '';
     
-    if (colaJugadores.length >= 4) {
-        setTimeout(() => sortearEquipos(), 500);
+    opcionesMapas.forEach((mapa, index) => {
+        const col = document.createElement('div');
+        col.className = 'col-md-4';
+        col.innerHTML = `
+            <div class="map-vote-card h-100" data-index="${index}">
+                <img src="${mapa.image_url || 'https://images.alphacoders.com/105/thumb-1920-105187.jpg'}" class="map-vote-img" alt="${mapa.name}" onerror="this.src='https://images.alphacoders.com/105/thumb-1920-105187.jpg'">
+                <div class="map-vote-info">
+                    <h6 class="map-vote-name">${mapa.name}</h6>
+                    <div>
+                        <div class="vote-badge mb-2" id="vote-badge-${index}">0</div>
+                    </div>
+                    <button class="btn btn-primary w-100 btn-votar" data-index="${index}">
+                        <i class="fas fa-plus-circle me-1"></i> Registrar Voto
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        // Eventos de clic para registrar voto (tanto en botón como en carta)
+        const card = col.querySelector('.map-vote-card');
+        const btnVotar = col.querySelector('.btn-votar');
+        
+        const handledVote = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            registrarVotoLocal(index);
+        };
+        
+        btnVotar.addEventListener('click', handledVote);
+        card.addEventListener('click', handledVote);
+        
+        elementos.containerMapas.appendChild(col);
+    });
+}
+
+// Incrementar contador local de votos para una opción
+function registrarVotoLocal(index) {
+    votosMapas[index]++;
+    const badge = document.getElementById(`vote-badge-${index}`);
+    if (badge) {
+        badge.innerText = votosMapas[index];
+        badge.classList.add('animate__animated', 'animate__bounceIn');
+        setTimeout(() => badge.classList.remove('animate__animated', 'animate__bounceIn'), 500);
+    }
+    
+    if (elementos.btnConfirmarMapa) {
+        elementos.btnConfirmarMapa.disabled = false; // Habilitar botón de confirmar al tener al menos un voto
+    }
+    
+    reproducirSonido('click');
+}
+
+// Lógica de cierre de votación y desempate
+function finalizarVotacionMapas() {
+    const maxVotos = Math.max(...votosMapas);
+    const indicesGanadores = [];
+    
+    votosMapas.forEach((votos, index) => {
+        if (votos === maxVotos) indicesGanadores.push(index);
+    });
+
+    let ganadorIndex;
+    if (indicesGanadores.length === 1) {
+        ganadorIndex = indicesGanadores[0];
     } else {
-        mostrarNotificacion('⚠️ No hay suficientes jugadores para el sorteo rápido', 'warning');
+        // Desempate aleatorio si hay empate de votos altos
+        ganadorIndex = indicesGanadores[Math.floor(Math.random() * indicesGanadores.length)];
+        mostrarNotificacion("🎲 ¡Empate! El servidor ha decidido el mapa al azar.", "info");
+    }
+
+    mapaSeleccionado = opcionesMapas[ganadorIndex];
+
+    // Cerrar modal programáticamente
+    const modalElement = document.getElementById('modal-votacion-mapas');
+    const modal = bootstrap.Modal.getInstance(modalElement);
+    if (modal) modal.hide();
+
+    // Mostrar finalmente los resultados en la pantalla principal con el mapa ganador
+    mostrarResultados();
+    mostrarNotificacion(`🗺️ Mapa seleccionado: ${mapaSeleccionado.name}`, "success");
+}
+
+// ===== FUNCIONES DE TIEMPO REAL (REALTIME) =====
+
+// Cargar la cola de espera desde la base de datos mapeada con sus perfiles
+async function cargarColaDesdeSupabase() {
+    try {
+        const { data, error } = await supabase
+            .from('lobby_queue')
+            .select(`
+                joined_at,
+                profiles (
+                    id,
+                    username,
+                    mmr,
+                    games_played
+                )
+            `)
+            .order('joined_at', { ascending: true });
+
+        if (error) throw error;
+
+        // Mapear al formato local compatible con la lógica del front
+        colaJugadores = (data || [])
+            .filter(row => row.profiles) // Evitar filas nulas por seguridad
+            .map(row => {
+                const p = row.profiles;
+                return {
+                    id: p.id,
+                    nombre: p.username,
+                    nivel: p.mmr || 1000,
+                    games_played: p.games_played || 0,
+                    personaje: 'No seleccionado'
+                };
+            });
+
+        // Refrescar la interfaz local con los datos recién bajados de la nube
+        actualizarEstadisticas();
+        actualizarCola();
+        actualizarBotones();
+    } catch (err) {
+        console.error("Error al sincronizar la cola con Supabase:", err);
+    }
+}
+
+// Suscribirse a los cambios en tiempo real sobre la tabla de cola
+function escucharColaEnTiempoReal() {
+    supabase
+        .channel('lobby-realtime')
+        .on(
+            'postgres_changes', 
+            { event: '*', schema: 'public', table: 'lobby_queue' }, 
+            async (payload) => {
+                console.log('📡 Cambio detectado en lobby global:', payload.eventType);
+                // Cuando alguien entra, sale o se limpia la cola, recargamos la cola para todos
+                await cargarColaDesdeSupabase();
+            }
+        )
+        .subscribe();
+}
+
+// Sorteo rápido (DB Realtime adaptive)
+async function sorteoRapido() {
+    if (jugadores.length < 4) {
+        mostrarNotificacion('⚠️ Registra al menos 4 jugadores para probar el sorteo rápido', 'warning');
+        return;
+    }
+    
+    mostrarNotificacion('⚡ Rellenando lobby global...', 'info');
+    
+    try {
+        // 1. Identificamos jugadores que NO estén actualmente en la cola
+        const disponibles = jugadores.filter(j => !colaJugadores.some(c => c.id === j.id));
+        
+        // 2. Calculamos cuántos cupos libres quedan (máximo 8)
+        const cuposLibres = 8 - colaJugadores.length;
+        
+        if (cuposLibres <= 0) {
+            // Si ya estaba lleno, simplemente sorteamos directamente
+            sortearEquipos();
+            return;
+        }
+        
+        // 3. Seleccionamos perfiles aleatorios
+        const elegidos = [...disponibles]
+            .sort(() => 0.5 - Math.random())
+            .slice(0, cuposLibres);
+            
+        if (elegidos.length === 0 && colaJugadores.length < 4) {
+            mostrarNotificacion('⚠️ No hay suficientes perfiles en base de datos para completar 4', 'warning');
+            return;
+        }
+
+        // 4. Los metemos en masa a la tabla lobby_queue en Supabase
+        if (elegidos.length > 0) {
+            const inserts = elegidos.map(e => ({ profile_id: e.id }));
+            const { error } = await supabase
+                .from('lobby_queue')
+                .insert(inserts);
+                
+            if (error) throw error;
+        }
+        
+        // 5. Esperamos un brevísimo instante para que el evento realtime actualice e invocamos
+        setTimeout(() => sortearEquipos(), 800);
+
+    } catch (err) {
+        console.error("Error en sorteo rápido de base de datos:", err);
+        mostrarNotificacion('❌ Error al poblar el lobby global', 'danger');
     }
 }
 
@@ -324,6 +596,22 @@ function sorteoRapido() {
 function mostrarResultados() {
     elementos.resultadosSection.style.display = 'block';
     elementos.equiposResultados.innerHTML = '';
+    
+    // Renderizar mapa elegido en su contenedor
+    if (elementos.containerMapaElegido) {
+        elementos.containerMapaElegido.innerHTML = '';
+        if (mapaSeleccionado) {
+            elementos.containerMapaElegido.innerHTML = `
+                <div class="mapa-elegido-banner animate__animated animate__fadeIn">
+                    <img src="${mapaSeleccionado.image_url || 'https://images.alphacoders.com/105/thumb-1920-105187.jpg'}" class="mapa-elegido-img" alt="${mapaSeleccionado.name}" onerror="this.src='https://images.alphacoders.com/105/thumb-1920-105187.jpg'">
+                    <div class="mapa-elegido-info">
+                        <h4><i class="fas fa-compass text-danger me-2"></i>CAMPAÑA OFICIAL ELEGIDA</h4>
+                        <p class="fw-bold text-warning mb-0">${mapaSeleccionado.name}</p>
+                    </div>
+                </div>
+            `;
+        }
+    }
     
     equipos.forEach((equipo, index) => {
         const equipoCard = crearEquipoCard(equipo, index);
@@ -378,9 +666,11 @@ function crearEquipoCard(equipo, index) {
 function nuevoSorteo() {
     elementos.resultadosSection.style.display = 'none';
     colaJugadores = [];
+    mapaSeleccionado = null; // Reseteamos el mapa seleccionado
+    if (elementos.containerMapaElegido) elementos.containerMapaElegido.innerHTML = '';
     actualizarInterfaz();
     guardarDatosLocalStorage();
-    mostrarNotificación('🔄 Preparando nuevo sorteo...', 'info');
+    mostrarNotificacion('🔄 Preparando nuevo sorteo...', 'info');
 }
 
 // Guardar partida
@@ -450,6 +740,16 @@ async function actualizarJugadoresGrid() {
             .order('mmr', { ascending: false });
 
         if (error) throw error;
+
+        // 🚀 NUEVO: Mapear y sincronizar con la lista global 'jugadores'
+        // Esto permite que el botón 'Sorteo Rápido' funcione con los perfiles reales de la base de datos
+        jugadores = (players || []).map(p => ({
+            id: p.id,
+            nombre: p.username,
+            nivel: p.mmr || 1000,
+            games_played: p.games_played || 0,
+            personaje: 'No seleccionado'
+        }));
 
         if (!players || players.length === 0) {
             elementos.jugadoresGrid.innerHTML = `

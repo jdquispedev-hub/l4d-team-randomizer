@@ -233,6 +233,9 @@
                 Equipos Formados
             </h2>
             
+            <!-- BANNER DE MAPA ELEGIDO -->
+            <div id="mapa-elegido-contenedor"></div>
+            
             <div class="row g-4" id="equipos-resultados">
                 <!-- Los equipos se mostrarán aquí -->
             </div>
@@ -264,6 +267,35 @@
             </small>
         </div>
     </footer>
+
+    <!-- MODAL DE VOTACIÓN DE MAPAS -->
+    <div class="modal fade" id="modal-votacion-mapas" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="modalVotacionLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-dark border-bottom-0">
+                    <h5 class="modal-title fs-4" id="modalVotacionLabel">
+                        <i class="fas fa-map-marked-alt text-danger me-2"></i>
+                        Votación de Campaña / Mapa
+                    </h5>
+                </div>
+                <div class="modal-body text-center py-4">
+                    <p class="lead text-warning mb-4">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Voten por el mapa que jugarán hoy. El más votado gana; si hay empate, el sistema desempatará aleatoriamente.
+                    </p>
+                    <div class="row g-4 justify-content-center" id="mapas-votacion-container">
+                        <!-- Insertado dinámicamente por JavaScript -->
+                    </div>
+                </div>
+                <div class="modal-footer bg-dark justify-content-center border-top-0 pb-4">
+                    <button type="button" id="btn-confirmar-mapa" class="btn btn-danger btn-lg px-5 shadow-pulse" disabled>
+                        <i class="fas fa-check-circle me-2"></i>
+                        Finalizar Votación y Ver Equipos
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>

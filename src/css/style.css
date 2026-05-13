@@ -791,3 +791,107 @@ footer {
     0% { left: -100%; }
     100% { left: 100%; }
 }
+
+/* ===== VOTACIÓN DE MAPAS ===== */
+.modal-content {
+    background: linear-gradient(135deg, var(--apocalipsis-negro) 0%, var(--zombi-gris) 100%) !important;
+    border: 3px solid var(--sangre-principal) !important;
+    color: var(--blanco-hueso) !important;
+    font-family: 'Oswald', sans-serif;
+}
+.modal-header {
+    border-bottom: 1px solid var(--sangre-oscuro) !important;
+}
+.modal-footer {
+    border-top: 1px solid var(--sangre-oscuro) !important;
+}
+.modal-title {
+    font-family: 'Russo One', sans-serif;
+    color: var(--sangre-brillante);
+}
+.map-vote-card {
+    background: rgba(26, 26, 26, 0.8);
+    border: 2px solid var(--sangre-oscuro);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    position: relative;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+.map-vote-card:hover {
+    transform: translateY(-5px);
+    border-color: var(--sangre-brillante);
+    box-shadow: 0 10px 25px rgba(255, 0, 0, 0.4);
+}
+.map-vote-img {
+    height: 140px;
+    object-fit: cover;
+    width: 100%;
+    filter: grayscale(30%) contrast(120%);
+    transition: all 0.3s ease;
+}
+.map-vote-card:hover .map-vote-img {
+    filter: grayscale(0%) contrast(100%);
+}
+.map-vote-info {
+    padding: 15px;
+    text-align: center;
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+.map-vote-name {
+    font-family: 'Russo One', sans-serif;
+    font-size: 1.1rem;
+    margin-bottom: 15px;
+    color: var(--blanco-hueso);
+    min-height: 2.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.vote-badge {
+    font-size: 1.5rem;
+    background: var(--sangre-oscuro);
+    color: var(--blanco-hueso);
+    padding: 5px 15px;
+    border-radius: 20px;
+    border: 2px solid var(--sangre-brillante);
+    font-family: 'Russo One', sans-serif;
+    display: inline-block;
+    margin: 10px 0;
+}
+.mapa-elegido-banner {
+    background: linear-gradient(90deg, rgba(139, 0, 0, 0.2), rgba(0, 0, 0, 0.8));
+    border-left: 5px solid var(--sangre-brillante);
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 25px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    border: 1px solid rgba(255, 0, 0, 0.2);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+}
+.mapa-elegido-img {
+    width: 120px;
+    height: 70px;
+    object-fit: cover;
+    border-radius: 4px;
+    border: 2px solid var(--sangre-oscuro);
+}
+.mapa-elegido-info h4 {
+    font-family: 'Russo One', sans-serif;
+    color: var(--sangre-brillante);
+    margin: 0 0 5px 0;
+}
+.mapa-elegido-info p {
+    margin: 0;
+    color: var(--blanco-hueso);
+    font-size: 1.2rem;
+}
+
