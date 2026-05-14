@@ -317,16 +317,8 @@ async function sortearEquipos() {
 
     const jugadoresEnCola = [...colaJugadores];
 
-    // 1. Mezclar jugadores
-    for (let i = jugadoresEnCola.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [jugadoresEnCola[i], jugadoresEnCola[j]] = [jugadoresEnCola[j], jugadoresEnCola[i]];
-    }
-
-    // 2. Dividir en equipos balanceados temporalmente
-    const mitad = Math.ceil(jugadoresEnCola.length / 2);
-    const equipoAlfa = jugadoresEnCola.slice(0, mitad);
-    const equipoBravo = jugadoresEnCola.slice(mitad);
+    // 🔥 NUEVO: Algoritmo de Balanceo Matemático Avanzado (Cero Sesgo, Máxima Paridad)
+    const [equipoAlfa, equipoBravo] = calcularEquiposEquilibrados(jugadoresEnCola);
 
     // Mapear estructura para compatibilidad visual
     equipos = [
@@ -1699,4 +1691,72 @@ async function enviarNotificacionDiscord(partida, mapa) {
         mostrarNotificacion('❌ Falló la conexión interna con Discord', 'danger');
     }
 }
+
+// ⚖️ ALGORITMO MAESTRO: BALANCEO MATEMÁTICO DE EQUIPOS (OPT-DIFF COMBINATORICS)
+function calcularEquiposEquilibrados(listaJugadores) {
+    if (!listaJugadores || listaJugadores.length === 0) return [[], []];
+    
+    const total = listaJugadores.length;
+    const tamanoEquipo = Math.ceil(total / 2);
+    
+    let todasLasCombinaciones = [];
+
+    // 1. Generador Combinatorio Recursivo (Calcula todos los subconjuntos de tamaño exacto N/2)
+    function generar(start, actual) {
+        if (actual.length === tamanoEquipo) {
+            todasLasCombinaciones.push([...actual]);
+            return;
+        }
+        for (let i = start; i < total; i++) {
+            actual.push(listaJugadores[i]);
+            generar(i + 1, actual);
+            actual.pop();
+        }
+    }
+
+    generar(0, []);
+
+    // 2. Evaluar cada combinación y calcular su paridad matemática de MMR
+    const opcionesEvaluadas = todasLasCombinaciones.map(equipoA => {
+        // El Equipo B son simplemente todos los jugadores que no forman parte del equipo A
+        const equipoB = listaJugadores.filter(j => !equipoA.some(a => a.id === j.id));
+        
+        const sumaA = equipoA.reduce((s, j) => s + (parseInt(j.nivel) || 1000), 0);
+        const sumaB = equipoB.reduce((s, j) => s + (parseInt(j.nivel) || 1000), 0);
+        const diferencia = Math.abs(sumaA - sumaB);
+
+        return {
+            equipoA,
+            equipoB,
+            diferencia
+        };
+    });
+
+    // 3. Ordenamos las opciones de menor a mayor diferencia absoluta
+    opcionesEvaluadas.sort((a, b) => a.diferencia - b.diferencia);
+
+    const mejorDiferencia = opcionesEvaluadas[0].diferencia;
+
+    // 4. 🎲 VARIEDAD INTELIGENTE (SMART TOLERANCE):
+    // Si siempre arrojamos el Match 100% óptimo, las mismas 8 personas jugarían siempre en los mismos bandos.
+    // Para dar rejugabilidad, filtramos TODAS las combinaciones que tengan la mejor diferencia o estén 
+    // en un margen de +40 MMR de holgura. Sigue siendo un balanceo brutal, pero con variedad táctica!
+    const margenTolerado = mejorDiferencia + 40;
+    const poolEquilibrado = opcionesEvaluadas.filter(op => op.diferencia <= margenTolerado);
+
+    // Elegimos al azar de este grupo de élite balanceado
+    const eleccionFinal = poolEquilibrado[Math.floor(Math.random() * poolEquilibrado.length)];
+
+    console.log(`🧠 [Matchmaker] Analizadas ${todasLasCombinaciones.length} combinaciones posibles.`);
+    console.log(`⚖️ [Matchmaker] Diferencia mínima teórica hallada: ${mejorDiferencia} MMR.`);
+    console.log(`🎲 [Matchmaker] Variante asignada con diferencia de: ${eleccionFinal.diferencia} MMR.`);
+
+    // 🪙 Lanzamos moneda final para mezclar quién va a la Izquierda (Superv) y Derecha (Infect)
+    if (Math.random() > 0.5) {
+        return [eleccionFinal.equipoA, eleccionFinal.equipoB];
+    } else {
+        return [eleccionFinal.equipoB, eleccionFinal.equipoA];
+    }
+}
+
 
