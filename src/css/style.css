@@ -955,3 +955,83 @@ footer {
     letter-spacing: 1px;
 }
 
+/* ===== 📈 EFECTO GLOW CYBER-INFO PARA GRÁFICOS ===== */
+.shadow-info-hover {
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    transition: all 0.3s ease-in-out;
+}
+
+.shadow-info-hover:hover {
+    box-shadow: 0 6px 25px rgba(13, 202, 240, 0.2) !important;
+    border-color: rgba(13, 202, 240, 0.45) !important;
+}
+
+
+
+
+/* 🛡️ ANTIBULTO / ELIMINAR DESPLAZAMIENTO HORIZONTAL DEL RANKING */
+#jugadores-grid {
+    overflow-x: hidden !important; /* Prohibido el scroll lateral */
+}
+
+/* Sobreescritura agresiva de badges generados inline en JS para forzar encaje */
+#jugadores-grid .badge {
+    font-size: 0.58rem !important;
+    padding: 3px 6.5px !important;
+    max-width: 135px !important; /* Más generoso dado el ancho 33% de col-xl-4 */
+    display: inline-block !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    vertical-align: middle;
+    text-align: left;
+    letter-spacing: 0.4px !important;
+}
+
+#jugadores-grid .badge i {
+    font-size: 0.55rem !important;
+    margin-right: 3px !important;
+    vertical-align: middle;
+}
+
+/* ===== 💎 LAYOUT ELITE: CONTENIDO CENTRAL 100% + SIDEBAR FLOTANTE EXTERNO ===== */
+.lobby-master-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 30px;
+    margin: 0 auto;
+    padding: 2rem 15px;
+    width: 100%;
+    /* Protege el ancho total: 1120px (Centro) + 320px (Lateral) + 30px (Gaps) */
+    max-width: 1500px; 
+}
+
+.lobby-main-content {
+    flex: 1;
+    /* Asigna EXACTAMENTE el tamaño estándar de una cuadrícula Bootstrap centrada (1140px aprox) */
+    max-width: 1120px; 
+    width: 100%;
+}
+
+.lobby-sidebar-content {
+    width: 320px;
+    flex-shrink: 0;
+    /* Permite que crezca hasta su límite máximo, pero empieza acoplado */
+    align-self: flex-start;
+}
+
+/* 📱 RESPONSIVE: Si la pantalla no da para sostener ambos lado a lado, fluyen verticalmente */
+@media (max-width: 1399px) {
+    .lobby-master-wrapper {
+        flex-direction: column;
+        align-items: center;
+        gap: 40px;
+    }
+    
+    .lobby-sidebar-content {
+        width: 100%;
+        max-width: 1120px; /* En tablets/móviles toma el mismo tamaño central */
+    }
+}
+

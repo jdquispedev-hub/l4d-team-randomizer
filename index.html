@@ -46,8 +46,9 @@
         </div>
     </header>
 
-    <!-- MAIN CONTENT -->
-    <main class="container">
+    <main class="lobby-master-wrapper">
+        <!-- ZONA CENTRAL INDEPENDIENTE (MANTIENE SU ANCHO COMPLETO) -->
+        <div class="lobby-main-content">
 
         <!-- ESTADÍSTICAS RÁPIDAS -->
         <section class="mb-5 text-center">
@@ -109,49 +110,7 @@
             </div>
         </section>
 
-        <!-- JUGADORES REGISTRADOS -->
-        <section class="mb-5">
-            <div class="row align-items-center mb-4">
-                <div class="col">
-                    <h2 class="mb-0">
-                        <i class="fas fa-trophy text-warning me-2"></i>
-                        Ranking de la Comunidad
-                    </h2>
-                </div>
-                <div class="col-auto">
-                    <a href="/src/pages/leaderboard/index.html" class="btn btn-sm btn-outline-warning">
-                        <i class="fas fa-external-link-alt me-1"></i>
-                        Ver Todo el Ranking
-                    </a>
-                </div>
-            </div>
 
-            <div class="row g-3" id="jugadores-grid">
-                <!-- Las cards de jugadores se insertarán aquí con JavaScript -->
-                <div class="col-lg-4 col-md-6">
-                    <div class="player-card">
-                        <div class="player-avatar">
-                            <i class="fas fa-user-secret"></i>
-                        </div>
-                        <div class="player-info">
-                            <h5 class="player-name">Esperando jugadores...</h5>
-                            <div class="player-stats">
-                                <span class="badge bg-secondary">MMR: --</span>
-                                <span class="badge bg-info">Personaje: --</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Lista alternativa para móviles -->
-            <ul id="jugadores-registrados" class="list-group d-lg-none">
-                <li class="list-group-item text-center text-muted">
-                    <i class="fas fa-inbox me-2"></i>
-                    No hay jugadores registrados aún
-                </li>
-            </ul>
-        </section>
 
         <!-- COLA Y SORTEO -->
         <section class="mb-5">
@@ -269,8 +228,38 @@
                 </button>
             </div>
         </section>
+        </div><!-- Fin lobby-main-content -->
 
-    </main>
+        <!-- BARRA LATERAL INDEPENDIENTE (CON CAPACIDAD DE CRECIMIENTO Y SCROLL) -->
+        <div class="lobby-sidebar-content">
+            <div class="card bg-dark border-warning border-opacity-25 shadow-lg shadow-warning-hover" style="max-height: 650px; background: radial-gradient(circle at bottom left, rgba(255, 193, 7, 0.03), rgba(10, 10, 10, 0.98)) !important; border-width: 1.5px; display: flex; flex-direction: column; overflow: hidden; transition: all 0.3s;">
+                
+                <!-- Cabecera del Ranking -->
+                <div class="card-header bg-black py-3 d-flex justify-content-between align-items-center border-bottom border-secondary border-opacity-10 flex-shrink-0">
+                    <h5 class="mb-0 fw-bold text-warning text-uppercase" style="font-family: 'Oswald', sans-serif; letter-spacing: 1.2px; font-size: 1rem;">
+                        <i class="fas fa-trophy text-warning me-2 animate__animated animate__pulse animate__infinite"></i>RANKING DE LA RED
+                    </h5>
+                    <span class="badge bg-warning text-dark fw-bold" style="font-size: 0.55rem; font-family: 'Russo One';">MMR</span>
+                </div>
+
+                <!-- Lista Vertical Desplazable (Crece naturalmente hasta max-height) -->
+                <div class="card-body p-2 flex-grow-1" style="overflow-y: auto; background: rgba(0, 0, 0, 0.35);" id="jugadores-grid">
+                    <div class="text-center py-5 text-muted small">
+                        <i class="fas fa-circle-notch fa-spin me-2 text-warning"></i>Sincronizando red...
+                    </div>
+                </div>
+
+                <!-- Pie de Enlace -->
+                <div class="card-footer bg-black py-2 border-top border-secondary border-opacity-10 flex-shrink-0">
+                    <a href="/src/pages/leaderboard/index.html" class="btn btn-xs btn-outline-warning w-100 text-uppercase fw-bold" style="font-size: 0.65rem; letter-spacing:0.5px;">
+                        <i class="fas fa-external-link-alt me-1"></i>Ver Ranking Extendido
+                    </a>
+                </div>
+            </div>
+        </div>
+
+    </main><!-- Fin lobby-master-wrapper -->
+
 
     <!-- FOOTER -->
     <footer class="bg-black text-center py-4 mt-5">

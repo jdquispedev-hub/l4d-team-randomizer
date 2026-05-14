@@ -20,6 +20,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btnLaunch = document.getElementById('btn-launch');
     const inputIp = document.getElementById('game-ip');
 
+    let userMmrCache = 1000; // Caché local para inicializar gráficos y cálculos
+
     // 2. Descargar perfil del usuario
     try {
         const { data: profile, error } = await supabase
@@ -31,6 +33,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (error) throw error;
 
         if (profile) {
+            userMmrCache = profile.mmr || 1000;
             // Rellenar UI con datos reales
             navUser.textContent = profile.username;
             dashUser.textContent = profile.username;
@@ -52,6 +55,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // ===== 📟 SISTEMA DE PAGINACIÓN Y DETALLE DE PARTIDAS (PRO) =====
+    let chartInstancia = null; // Referencia única al gráfico oficial
     let misPartidasGlobal = [];
     let mapasDictCache = {};
     let paginaActual = 1;
@@ -64,7 +68,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btnNext = document.getElementById('btn-next-page');
 
     // Cargar el historial PERSONAL completo del usuario autenticado
-    async function cargarHistorialPersonal(userId) {
+    async function cargarHistorialPersonal(userId, currentMmr) {
         const container = document.getElementById('dashboard-historial-grid');
         if (!container) return;
 
@@ -111,6 +115,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             // 3. Renderizar la primera página de 10 elementos
             paginaActual = 1;
             renderizarPartidasPagina(paginaActual, userId);
+
+            // 🚀 NUEVO: Dibujar Gráfico Animado de Curva de Rendimiento (MMR)
+            dibujarGraficoCurvaMMR(misPartidasGlobal, currentMmr, userId);
 
             // 4. Calcular Winrate Real basado en TODO el historial completo descargado
             const totalJugadas = misPartidasGlobal.length;
@@ -314,6 +321,131 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
+    // 🚀 MAESTRO: Constructor y Configuración Avanzada de Chart.js para Curva MMR
+    function dibujarGraficoCurvaMMR(misPartidas, userCurrentMmr, userId) {
+        const canvas = document.getElementById('mmr-chart');
+        if (!canvas) return;
+
+        // Prevenir solapamientos destruyendo instancia previa en recargas calientes
+        if (chartInstancia) {
+            chartInstancia.destroy();
+        }
+
+        // Invertir orden: De la más antigua a la más reciente. 
+        // Tomamos ventana de últimas 15 partidas para un trazo de curva perfecto y limpio
+        const historicoCronologico = [...misPartidas].slice(0, 15).reverse();
+
+        const datasetMMR = [];
+        const labelsFechas = [];
+
+        historicoCronologico.forEach((p) => {
+            // Extraer el nodo exacto del jugador dentro del Snapshot JSON guardado en la base
+            const totalParticipantes = [...(p.team_alfa || []), ...(p.team_bravo || [])];
+            const miRegistro = totalParticipantes.find(u => u.id === userId);
+
+            if (miRegistro) {
+                datasetMMR.push(miRegistro.nivel || 1000);
+                
+                // Formatear día y mes corto
+                const d = new Date(p.created_at);
+                labelsFechas.push(d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }));
+            }
+        });
+
+        // 🛡️ AGREGADO CLAVE: Insertamos el MMR Actual como broche final en la derecha del gráfico
+        datasetMMR.push(userCurrentMmr);
+        labelsFechas.push("AHORA 🔥");
+
+        // Si el usuario no ha jugado nada aún (cuenta virgen), forzamos punto de arranque en 1000
+        if (datasetMMR.length === 1 && datasetMMR[0] === userCurrentMmr) {
+            datasetMMR.unshift(1000);
+            labelsFechas.unshift("Alineación");
+        }
+
+        // Crear un contexto 2D para inyectar un degradado CSS-in-JS elegante al fondo
+        const ctx2d = canvas.getContext('2d');
+        const gradientBg = ctx2d.createLinearGradient(0, 0, 0, 220);
+        gradientBg.addColorStop(0, 'rgba(13, 202, 240, 0.35)');  // Cyan glow intenso arriba
+        gradientBg.addColorStop(0.6, 'rgba(13, 202, 240, 0.05)'); // Desvanecimiento
+        gradientBg.addColorStop(1, 'rgba(0, 0, 0, 0)');          // Transparente absoluto
+
+        // Lanzar Chart.js
+        chartInstancia = new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels: labelsFechas,
+                datasets: [{
+                    label: 'Tu MMR',
+                    data: datasetMMR,
+                    borderColor: '#0dcaf0', // Cyber Cyan
+                    borderWidth: 3.5,
+                    backgroundColor: gradientBg,
+                    fill: true,
+                    tension: 0.4, // Suavizado cúbico ultra moderno (estilo TradingView/Esports)
+                    pointBackgroundColor: '#0dcaf0',
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 2,
+                    pointRadius: 4.5,
+                    pointHoverRadius: 7,
+                    pointHoverBackgroundColor: '#ffffff',
+                    pointHoverBorderColor: '#0dcaf0',
+                    pointHoverBorderWidth: 3,
+                    shadowColor: 'rgba(13, 202, 240, 0.5)',
+                    shadowBlur: 10
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: {
+                    duration: 1200,
+                    easing: 'easeOutQuart'
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(10, 10, 10, 0.95)',
+                        titleFont: { family: 'Oswald', size: 12, weight: 'bold' },
+                        bodyFont: { family: 'Russo One', size: 13 },
+                        titleColor: '#888',
+                        bodyColor: '#0dcaf0',
+                        borderColor: 'rgba(13, 202, 240, 0.3)',
+                        borderWidth: 1,
+                        padding: 10,
+                        displayColors: false,
+                        callbacks: {
+                            label: function(tooltipItem) {
+                                return `⚡ ${tooltipItem.parsed.y} PUNTOS MMR`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: {
+                            color: 'rgba(255, 255, 255, 0.35)',
+                            font: { family: 'Inter', size: 9, weight: 'bold' }
+                        }
+                    },
+                    y: {
+                        position: 'right', // Escala a la derecha para no molestar el inicio del trazo
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.04)',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            color: 'rgba(255, 255, 255, 0.3)',
+                            font: { family: 'Russo One', size: 9 },
+                            precision: 0,
+                            stepSize: 50
+                        }
+                    }
+                }
+            }
+        });
+    }
+
     // Configurar Listeners de los Botones de Paginación
     btnPrev?.addEventListener('click', () => {
         if (paginaActual > 1) {
@@ -330,8 +462,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // Lanzar carga inicial al abrir sesión
-    await cargarHistorialPersonal(session.user.id);
+    // Lanzar carga inicial al abrir sesión pasando la caché de MMR
+    await cargarHistorialPersonal(session.user.id, userMmrCache);
 
     // 3. Lógica del Lanzador Steam Connect (POR IP)
     btnLaunch?.addEventListener('click', () => {

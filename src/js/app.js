@@ -1222,44 +1222,57 @@ async function actualizarJugadoresGrid() {
 
         if (!players || players.length === 0) {
             elementos.jugadoresGrid.innerHTML = `
-                <div class="col-lg-4 col-md-6">
-                    <div class="player-card">
-                        <div class="player-avatar"><i class="fas fa-user-secret"></i></div>
-                        <div class="player-info">
-                            <h5 class="player-name">Esperando jugadores...</h5>
-                            <div class="player-stats">
-                                <span class="badge bg-secondary">Sin registros aún</span>
-                            </div>
-                        </div>
-                    </div>
+                <div class="text-center py-5 text-muted small">
+                    <i class="fas fa-user-slash fa-2x mb-2 opacity-25"></i>
+                    <p class="mb-0">Sin supervivientes registrados.</p>
                 </div>
             `;
             return;
         }
 
-        // Renderizado real
-        elementos.jugadoresGrid.innerHTML = players.map(p => {
-            // Lógica de Ocultar MMR si < 10 partidas
-            const mmrDisplay = p.games_played < 10 ? 'Calibrando' : p.mmr;
-            const badgeColor = p.games_played < 10 ? 'bg-warning text-dark' : 'bg-danger';
+        // Renderizado Compacto de Barra Lateral
+        elementos.jugadoresGrid.innerHTML = players.map((p, index) => {
+            const mmrDisplay = p.games_played < 10 ? '???' : (p.mmr || 1000);
+            const enCola = colaJugadores.some(c => c.id === p.id);
+            const rankPos = index + 1;
+
+            // Colores de podio para mayor jerarquía visual
+            let badgeTop = 'bg-secondary';
+            if (rankPos === 1) badgeTop = 'bg-warning text-dark fw-bold'; // Oro
+            if (rankPos === 2) badgeTop = 'bg-light text-dark fw-bold';   // Plata
+            if (rankPos === 3) badgeTop = 'bg-danger text-white fw-bold';  // Bronce
 
             return `
-                <div class="col-lg-4 col-md-6">
-                    <div class="player-card h-100">
-                        <div class="player-avatar">
-                            ${getPersonajeEmoji(p.avatar_url || 'No seleccionado')}
-                        </div>
-                        <div class="player-info">
-                            <h5 class="player-name fw-bold mb-1">${p.username}</h5>
-                            <div class="mb-2">
+                <div class="d-flex align-items-center justify-content-between p-2.5 mb-2 rounded border ${enCola ? 'border-success border-opacity-50 shadow-sm' : 'border-secondary border-opacity-10'}" 
+                     style="background: ${enCola ? 'rgba(25, 135, 84, 0.08)' : 'rgba(20, 20, 20, 0.5)'}; transition: all 0.2s; min-height: 60px;">
+                    
+                    <div class="d-flex align-items-center min-width-0 flex-grow-1">
+                        <!-- Indicador de Puesto (Más grande y separado) -->
+                        <span class="badge ${badgeTop} me-3.5 d-flex align-items-center justify-content-center" 
+                              style="width: 25px; height: 25px; font-size: 0.75rem; border-radius: 6px; font-family: 'Russo One'; min-width: 25px;">
+                            ${rankPos}
+                        </span>
+
+                        <!-- Avatar y Nombre (Letras más grandes) -->
+                        <div class="min-width-0 flex-grow-1">
+                            <h6 class="fw-bold text-white text-truncate mb-0" style="font-family: 'Oswald', sans-serif; font-size: 1.05rem; letter-spacing: 0.5px; text-transform: uppercase;">
+                                ${p.username}
+                                ${enCola ? '<span class="ms-1 animate__animated animate__flash animate__infinite text-success fw-bold" style="font-size:0.65rem; font-family:\'Russo One\';">● COLA</span>' : ''}
+                            </h6>
+                            <div class="mt-1">
                                 ${obtenerRangoBadge(p.mmr || 1000, p.games_played || 0)}
                             </div>
-                            <div class="player-stats mt-1">
-                                <span class="badge ${badgeColor} fs-6 shadow-sm">MMR: ${mmrDisplay}</span>
-                                <span class="badge bg-dark border border-secondary border-opacity-25 small ms-1">${p.games_played}/10 PJ</span>
-                                ${colaJugadores.some(c => c.id === p.id) ? '<span class="badge bg-success ms-1 animate__animated animate__flash animate__infinite">EN COLA</span>' : ''}
-                            </div>
                         </div>
+                    </div>
+
+                    <!-- Puntuación y PJ (Luz blanca legible) -->
+                    <div class="text-end flex-shrink-0 px-1 ms-2" style="min-width: 55px;">
+                        <div class="fw-bold text-warning" style="font-family: 'Russo One'; font-size: 1rem;">
+                            ${mmrDisplay}
+                        </div>
+                        <small class="text-white-50 text-uppercase fw-bold" style="font-size: 0.6rem; display: block; margin-top: 1px; letter-spacing:0.5px;">
+                            ${p.games_played} PJ
+                        </small>
                     </div>
                 </div>
             `;
@@ -1267,7 +1280,7 @@ async function actualizarJugadoresGrid() {
 
     } catch (err) {
         console.error("Error cargando ranking:", err);
-        elementos.jugadoresGrid.innerHTML = `<p class="text-danger">Error al conectar con la base de datos.</p>`;
+        elementos.jugadoresGrid.innerHTML = `<div class="alert alert-danger p-2 text-center small m-1"><i class="fas fa-exclamation-circle me-1"></i>Error de base de datos.</div>`;
     }
 }
 
