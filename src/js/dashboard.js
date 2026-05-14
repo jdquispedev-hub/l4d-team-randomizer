@@ -284,7 +284,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         <div class="card h-100 border-0 bg-black bg-opacity-25">
                             <div class="card-header border-bottom border-secondary border-opacity-10 py-2 d-flex justify-content-between align-items-center" style="background: rgba(46, 125, 50, 0.12) !important;">
                                 <h6 class="mb-0 text-success fw-bold" style="font-family: 'Oswald', sans-serif; font-size:0.8rem; letter-spacing:1px;">
-                                    🛡️ SUPERVIVIENTES (ALFA)
+                                    🛡️ SUPERVIVIENTES
                                 </h6>
                                 ${alfaGano ? '<span class="badge bg-success border border-success border-opacity-50 py-1 px-2 text-uppercase fw-bold shadow-sm" style="font-size:0.55rem; font-family: Russo One;">GANADORES</span>' : ''}
                             </div>
@@ -299,7 +299,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         <div class="card h-100 border-0 bg-black bg-opacity-25">
                             <div class="card-header border-bottom border-secondary border-opacity-10 py-2 d-flex justify-content-between align-items-center" style="background: rgba(198, 40, 40, 0.12) !important;">
                                 <h6 class="mb-0 text-danger fw-bold" style="font-family: 'Oswald', sans-serif; font-size:0.8rem; letter-spacing:1px;">
-                                    🧟‍♂️ INFECTADOS (BRAVO)
+                                    🧟‍♂️ INFECTADOS
                                 </h6>
                                 ${bravoGano ? '<span class="badge bg-danger border border-danger border-opacity-50 py-1 px-2 text-uppercase fw-bold shadow-sm" style="font-size:0.55rem; font-family: Russo One;">GANADORES</span>' : ''}
                             </div>

@@ -559,7 +559,9 @@ async function finalizarVotacionMapas() {
         if (error) throw error;
 
         mostrarNotificacion(`🗺️ ¡Mapa definido!: ${mapaGanadorObj.name}`, "success");
-        // Todas las demás ventanas captarán el cambio de status a 'playing' vía Realtime!
+
+        // 🤖 Disparar Notificación Segura a tu Servidor de Discord!
+        enviarNotificacionDiscord(partidaActiva, mapaGanadorObj);
 
     } catch (err) {
         console.error("Error en cierre de votación:", err);
@@ -1600,3 +1602,101 @@ styleGloria.textContent = `
     }
 `;
 document.head.appendChild(styleGloria);
+
+// 🤖 DISPARADOR DE NOTIFICACIÓN PROFESIONAL A DISCORD (WEBHOOK)
+// 🤖 DISPARADOR DE NOTIFICACIÓN PROFESIONAL A DISCORD (WEBHOOK - MOTOR ANTIFALLOS)
+async function enviarNotificacionDiscord(partida, mapa) {
+    console.log("🚀 Iniciando envío de Webhook a Discord...");
+    const webhookUrl = import.meta.env.VITE_DISCORD_WEBHOOK_URL;
+    
+    if (!webhookUrl || webhookUrl.trim() === '' || webhookUrl.includes('tu_codigo_secreto')) {
+        console.warn('⚠️ [Discord] El Webhook no está configurado o tiene la URL de ejemplo.');
+        return;
+    }
+
+    try {
+        // 🛡️ SEGURIDAD TOTAL DE PARSEO: Si la DB devolviera strings en vez de arrays parsedos
+        let superv = partida.team_alfa || [];
+        let infect = partida.team_bravo || [];
+        
+        if (typeof superv === 'string') superv = JSON.parse(superv);
+        if (typeof infect === 'string') infect = JSON.parse(infect);
+
+        // Asegurar que sean arrays válidos
+        if (!Array.isArray(superv)) superv = [];
+        if (!Array.isArray(infect)) infect = [];
+
+        // Calculamos promedios de combate de forma 100% segura
+        const avgSuperv = Math.round(superv.reduce((sum, j) => sum + (parseInt(j.nivel) || 1000), 0) / (superv.length || 1));
+        const avgInfect = Math.round(infect.reduce((sum, j) => sum + (parseInt(j.nivel) || 1000), 0) / (infect.length || 1));
+
+        // Generar listas elegantes (máximo 200 caracters para no romper Discord limits)
+        const listaSuperv = superv.map(j => `👤 **${j.nombre || 'Recluta'}** \`(${j.nivel || 1000} MMR)\``).join('\n') || 'Vaciando refugio...';
+        const listaInfect = infect.map(j => `👤 **${j.nombre || 'Cazador'}** \`(${j.nivel || 1000} MMR)\``).join('\n') || 'Esperando horda...';
+
+        // 🛡️ IMÁGENES SEGURAS: Si el mapa no tiene URL, usar una segura por defecto
+        const imagenMapa = (mapa && mapa.image_url && mapa.image_url.startsWith('http')) 
+            ? mapa.image_url 
+            : "https://images.alphacoders.com/105/thumb-1920-105187.jpg";
+
+        // Construimos el Embed enriquecido premium
+        const richEmbed = {
+            username: "L4D2 Command Center",
+            avatar_url: "https://i.imgur.com/Jp3Kxly.png", 
+            embeds: [
+                {
+                    title: "🎮 ¡NUEVA PARTIDA CONFIRMADA! ⚔️",
+                    description: "El sorteo ha finalizado y la campaña está asignada. ¡Conéctense al servidor de inmediato!",
+                    // 💡 NOTA: Eliminamos el 'url' dinámico de localhost ya que a veces Discord lo rechaza por seguridad
+                    color: 15844367, // Dorado neón vibrante
+                    fields: [
+                        {
+                            name: `🛡️ SUPERVIVIENTES [Promedio: ${avgSuperv} MMR]`,
+                            value: listaSuperv.substring(0, 1000), // Evitar sobrepasar límites de Discord
+                            inline: false
+                        },
+                        {
+                            name: `🧟‍♂️ INFECTADOS [Promedio: ${avgInfect} MMR]`,
+                            value: listaInfect.substring(0, 1000),
+                            inline: false
+                        },
+                        {
+                            name: "🗺️ CAMPAÑA / MAPA SELECCIONADO",
+                            value: `📍 **${mapa ? mapa.name : 'Campaña Aleatoria'}** 🩸`,
+                            inline: true
+                        }
+                    ],
+                    image: {
+                        url: imagenMapa
+                    },
+                    footer: {
+                        text: "🕹️ L4D2 PUG System • Que gane el mejor",
+                        icon_url: "https://i.imgur.com/Jp3Kxly.png"
+                    },
+                    timestamp: new Date().toISOString()
+                }
+            ]
+        };
+
+        console.log("📦 Payload de Discord preparado. Realizando Fetch...");
+        
+        const response = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(richEmbed)
+        });
+
+        if (!response.ok) {
+            const textError = await response.text();
+            console.error('❌ [Discord Webhook] Falló con estado:', response.status, textError);
+            mostrarNotificacion(`⚠️ Discord rechazó la solicitud: ${response.status}`, 'warning');
+        } else {
+            console.log('🚀 [Discord Webhook] ¡Notificación enviada con éxito al canal!');
+            mostrarNotificacion('🤖 ¡Aviso enviado al canal de Discord!', 'success');
+        }
+    } catch (error) {
+        console.error('❌ [Discord Webhook] Error fatal en el código:', error);
+        mostrarNotificacion('❌ Falló la conexión interna con Discord', 'danger');
+    }
+}
+
