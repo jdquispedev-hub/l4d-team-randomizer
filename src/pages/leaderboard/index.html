@@ -1,5 +1,242 @@
 <!DOCTYPE html>
 <html lang="es">
-<head><meta charset="UTF-8"><title>Leaderboard</title></head>
-<body><h1>Leaderboard Pendiente</h1></body>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🏆 Salón de la Fama - L4D2 Team Randomizer</title>
+    <meta name="description" content="Tabla clasificatoria oficial y estadísticas extendidas del L4D2 Randomizer">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Oswald:wght@300;500;700&family=Russo+One&display=swap" rel="stylesheet">
+
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Font Awesome para iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- CSS Animaciones -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+
+    <!-- CSS Global del Proyecto -->
+    <link rel="stylesheet" href="/src/css/style.css">
+
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>">
+
+    <!-- Estilos Custom para el Leaderboard Premium -->
+    <style>
+        body {
+            background-color: #0b0b0b !important;
+            color: #eee;
+            font-family: 'Inter', sans-serif;
+            background-image: radial-gradient(circle at center, #1f0505 0%, #050505 100%) !important;
+        }
+
+        .main-content-container {
+            max-width: 1120px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+        }
+
+        .bg-glass-dark {
+            background: rgba(15, 15, 15, 0.65) !important;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .search-box {
+            background: rgba(20, 20, 20, 0.8) !important;
+            border: 1.5px solid rgba(255, 193, 7, 0.25) !important;
+            color: #fff !important;
+            font-family: 'Oswald', sans-serif;
+            letter-spacing: 0.5px;
+            font-size: 1.1rem;
+            border-radius: 12px !important;
+            transition: all 0.3s ease;
+        }
+
+        .search-box:focus {
+            background: rgba(30, 10, 10, 0.9) !important;
+            border-color: #ffc107 !important;
+            box-shadow: 0 0 15px rgba(255, 193, 7, 0.3) !important;
+        }
+
+        .leaderboard-table {
+            border-collapse: separate;
+            border-spacing: 0 8px; /* Separación entre filas para efecto de tarjetas */
+        }
+
+        .leaderboard-table tbody tr {
+            background: linear-gradient(145deg, rgba(20, 20, 20, 0.9), rgba(10, 10, 10, 0.95)) !important;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            cursor: pointer;
+        }
+
+        .leaderboard-table tbody tr:hover {
+            transform: translateY(-2px) scale(1.005);
+            box-shadow: 0 8px 20px rgba(255, 193, 7, 0.15);
+            background: linear-gradient(145deg, rgba(35, 15, 15, 0.95), rgba(15, 5, 5, 0.98)) !important;
+        }
+
+        .leaderboard-table td, .leaderboard-table th {
+            border: none !important;
+            vertical-align: middle !important;
+        }
+
+        .leaderboard-table tbody tr td:first-child {
+            border-top-left-radius: 10px;
+            border-bottom-left-radius: 10px;
+        }
+
+        .leaderboard-table tbody tr td:last-child {
+            border-top-right-radius: 10px;
+            border-bottom-right-radius: 10px;
+        }
+
+        .badge-rango {
+            font-family: 'Russo One', sans-serif;
+            font-size: 0.75rem;
+            letter-spacing: 0.5px;
+            padding: 6px 12px;
+            border-radius: 6px;
+            text-transform: uppercase;
+        }
+
+        .medal-container {
+            font-size: 1.6rem;
+            filter: drop-shadow(0 0 4px rgba(0,0,0,0.5));
+        }
+
+        .mmr-text {
+            font-family: 'Oswald', sans-serif;
+            font-weight: 700;
+            font-size: 1.2rem;
+            letter-spacing: 0.5px;
+        }
+
+        .winrate-circle {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: 700;
+            border: 2.5px solid;
+        }
+
+        .fire-streak {
+            text-shadow: 0 0 10px rgba(255, 68, 0, 0.8);
+            animation: flamePulse 1.5s infinite alternate;
+        }
+
+        @keyframes flamePulse {
+            from { transform: scale(1); opacity: 0.8; }
+            to { transform: scale(1.15); opacity: 1; filter: brightness(1.3); }
+        }
+
+        .btn-volver {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #ccc;
+            font-family: 'Oswald', sans-serif;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+        }
+
+        .btn-volver:hover {
+            background: #dc3545;
+            color: white;
+            border-color: #dc3545;
+            box-shadow: 0 0 15px rgba(220, 53, 69, 0.4);
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="main-content-container">
+        
+        <!-- BOTÓN VOLVER Y LOGO -->
+        <div class="d-flex justify-content-between align-items-center mb-5 animate__animated animate__fadeInDown">
+            <a href="/" class="btn btn-volver px-4 py-2 rounded-pill fw-bold">
+                <i class="fas fa-arrow-left me-2"></i> VOLVER AL LOBBY
+            </a>
+            <div class="text-end">
+                <span class="badge bg-danger px-3 py-1 rounded-1" style="font-family: 'Russo One'; font-size: 0.7rem; letter-spacing: 1px;">APOCALIPSIS COMPETITIVO</span>
+            </div>
+        </div>
+
+        <!-- TÍTULO PRINCIPAL -->
+        <div class="text-center mb-5 animate__animated animate__zoomIn">
+            <h1 class="display-4 fw-bold text-uppercase mb-2" style="font-family: 'Russo One', sans-serif; letter-spacing: 3px; background: linear-gradient(to right, #ffffff, #ffc107, #ff4444); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 0 15px rgba(255, 193, 7, 0.15));">
+                🏆 SALÓN DE LA FAMA 🏆
+            </h1>
+            <p class="lead text-white-50 fw-light" style="font-family: 'Oswald', sans-serif; font-size: 1.25rem; letter-spacing: 1px;">
+                El registro oficial de leyendas, supervivientes caídos y reyes de la horda.
+            </p>
+        </div>
+
+        <!-- BUSCADOR E INFORMACIÓN RÁPIDA -->
+        <div class="row g-4 mb-4 animate__animated animate__fadeInUp">
+            <div class="col-lg-8">
+                <div class="input-group input-group-lg shadow-sm">
+                    <span class="input-group-text search-box border-end-0 px-4 rounded-0 rounded-start" style="background: rgba(15, 15, 15, 0.8) !important; color: #aaa;"><i class="fas fa-search"></i></span>
+                    <input type="text" id="search-input" class="form-control search-box border-start-0 rounded-0 rounded-end" placeholder="ESCRIBE UN USERNAME PARA BUSCAR...">
+                </div>
+            </div>
+            <div class="col-lg-4 d-flex align-items-center justify-content-lg-end">
+                <div class="text-muted ps-2" style="font-family: 'Oswald', sans-serif; font-size: 1.05rem;">
+                    <span class="text-warning fw-bold" id="total-players-badge">0</span> JUGADORES REGISTRADOS EN TOTAL
+                </div>
+            </div>
+        </div>
+
+        <!-- TABLA DE LEADERBOARD -->
+        <div class="table-responsive animate__animated animate__fadeInUp animate__delay-1s" style="overflow: visible;">
+            <table class="table table-dark leaderboard-table align-middle text-center">
+                <thead class="text-uppercase text-white-50 fw-bold" style="font-family: 'Russo One'; font-size: 0.85rem; letter-spacing: 1px;">
+                    <tr>
+                        <th scope="col" class="py-3" style="width: 80px;"># POS</th>
+                        <th scope="col" class="py-3 text-start ps-4">JUGADOR</th>
+                        <th scope="col" class="py-3">RANGO Y CLASE</th>
+                        <th scope="col" class="py-3">🏆 MMR</th>
+                        <th scope="col" class="py-3">PARTIDAS</th>
+                        <th scope="col" class="py-3">🔥 RACHA</th>
+                        <th scope="col" class="py-3">WIN RATE</th>
+                    </tr>
+                </thead>
+                <tbody id="leaderboard-body">
+                    <!-- Spinner de Carga Inicial -->
+                    <tr>
+                        <td colspan="7" class="py-5 text-center">
+                            <div class="spinner-border text-warning" role="status" style="width: 3rem; height: 3rem;"></div>
+                            <div class="mt-3 fw-bold text-white-50" style="font-family: 'Oswald', sans-serif;">DESCARGANDO EXPEDIENTES DE COMBATE...</div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- FOOTER SUTIL -->
+        <div class="text-center text-white-50 mt-5 pt-4 border-top border-secondary border-opacity-25" style="font-family: 'Oswald', sans-serif; font-size: 0.9rem;">
+            <i class="fas fa-biohazard text-danger me-1"></i> Actualizado en vivo mediante Supabase Realtime • L4D2 Team Randomizer &copy; 2026
+        </div>
+
+    </div>
+
+    <!-- Scripts de Dependencias -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Motor JS de la Página -->
+    <script type="module" src="./leaderboard.js"></script>
+</body>
+
 </html>
