@@ -24,6 +24,7 @@ let partidaActiva = null;
 let opcionesMapasCompletas = [];
 let votosPartida = [];
 let intervalCuentaAtras = null;
+let intervalReadyCheck = null;
 
 // ===== ELEMENTOS DEL DOM =====
 const elementos = {
@@ -185,6 +186,9 @@ function inicializarEventListeners() {
     elementos.btnGananSurvs?.addEventListener('click', () => finalizarPartidaConGanador('Supervivientes'));
     elementos.btnGananInfec?.addEventListener('click', () => finalizarPartidaConGanador('Infectados'));
 
+    // Ready Check (Confirmación de Partida)
+    document.getElementById('btn-aceptar-partida')?.addEventListener('click', aceptarMatch);
+
 }
 
 // ===== FUNCIONES PRINCIPALES =====
@@ -320,10 +324,14 @@ async function sortearEquipos() {
     // 🔥 NUEVO: Algoritmo de Balanceo Matemático Avanzado (Cero Sesgo, Máxima Paridad)
     const [equipoAlfa, equipoBravo] = calcularEquiposEquilibrados(jugadoresEnCola);
 
+    // Inicializar a todos los jugadores mapeados con is_ready: false para el Ready Check
+    const equipoAlfaReady = equipoAlfa.map(j => ({ ...j, is_ready: false }));
+    const equipoBravoReady = equipoBravo.map(j => ({ ...j, is_ready: false }));
+
     // Mapear estructura para compatibilidad visual
     equipos = [
-        { nombre: 'Supervivientes', jugadores: equipoAlfa },
-        { nombre: 'Infectados', jugadores: equipoBravo }
+        { nombre: 'Supervivientes', jugadores: equipoAlfaReady },
+        { nombre: 'Infectados', jugadores: equipoBravoReady }
     ];
 
     try {
@@ -339,13 +347,14 @@ async function sortearEquipos() {
         const mezclados = [...maps].sort(() => 0.5 - Math.random());
         const chosenMaps = mezclados.slice(0, 3);
 
-        // 4. Crear la Partida Activa en Supabase en estado 'voting'
+        // 4. Crear la Partida Activa en Supabase en estado 'voting' pero con votación deshabilitada (Ready Check)
         const { data: newMatch, error: matchErr } = await supabase
             .from('matches')
             .insert([{
                 status: 'voting',
-                team_alfa: equipoAlfa,
-                team_bravo: equipoBravo,
+                is_voting_enabled: false, // 🛡️ FASE DE READY CHECK INICIAL
+                team_alfa: equipoAlfaReady,
+                team_bravo: equipoBravoReady,
                 map_opt_1: chosenMaps[0].id,
                 map_opt_2: chosenMaps[1].id,
                 map_opt_3: chosenMaps[2].id,
@@ -360,14 +369,10 @@ async function sortearEquipos() {
         estadisticas.partidasTotales++;
         estadisticas.rachaActual++;
 
-        // 5. Limpiar a los jugadores elegidos del Lobby global en Supabase
-        const idsSorteados = jugadoresEnCola.map(j => j.id);
-        await supabase
-            .from('lobby_queue')
-            .delete()
-            .in('profile_id', idsSorteados);
-
-        mostrarNotificacion('🔥 ¡Lobby cerrado! Votación de mapas iniciada globalmente.', 'success');
+        // 🔥 CRUCIAL: NO los eliminamos del lobby_queue todavía! 
+        // Eso sucederá una vez que TODOS confirmen el Ready Check.
+        
+        mostrarNotificacion('⚔️ Partida encontrada. Iniciando Ready Check global de 15s!', 'warning');
 
         // El Realtime propagará la inserción a todas las ventanas automáticamente!
 
@@ -569,7 +574,7 @@ async function verificarYRestaurarPartidaActiva() {
         const { data: active, error } = await supabase
             .from('matches')
             .select('*')
-            .eq('status', 'voting')
+            .eq('status', 'voting') // Volvemos a 'voting' oficial soportado por DB
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle();
@@ -578,6 +583,16 @@ async function verificarYRestaurarPartidaActiva() {
 
         if (active) {
             partidaActiva = active;
+
+            if (active.is_voting_enabled === false) {
+                // 🛡️ Fase de Ready Check (15 segundos de confirmación)
+                forzarCerrarModalVotacion();
+                abrirModalReadyCheck(active);
+                return; // Cortar aquí, no cargar mapas ni votos hasta avanzar
+            } else {
+                // Avanzó a votación! Limpiar Ready Check
+                forzarCerrarModalReadyCheck();
+            }
 
             // Reconstruimos el array estructurado clásico para visualización
             equipos = [
@@ -616,7 +631,8 @@ async function verificarYRestaurarPartidaActiva() {
             // ⏲️ Activar cuenta atrás sincronizada a milisegundos del servidor!
             iniciarCuentaAtrasVisual();
         } else {
-            // 🛡️ CIERRE ABSOLUTO DE EMERGENCIA DEL MODAL PARA TODOS
+            // 🛡️ CIERRE ABSOLUTO DE EMERGENCIA DE AMBOS MODALES PARA TODOS
+            forzarCerrarModalReadyCheck();
             forzarCerrarModalVotacion();
 
             // 🚀 NUEVO: Intentamos recuperar la partida en fase 'playing' (en juego) para pintar los
@@ -1409,11 +1425,81 @@ function getNotificacionColor(tipo) {
 }
 
 // Reproducir sonido (simulado)
+// Reproducir sonido (Con Auto-Detección Local, Duración Limitada y Fade-Out Suave)
 function reproducirSonido(tipo) {
     if (!elementos.soundEffects?.checked) return;
 
-    // Aquí podrías agregar sonidos reales
-    console.log(`🔊 Reproduciendo sonido: ${tipo}`);
+    // 1. Enlaces oficiales de respaldo en Internet
+    const respaldosOnline = {
+        'inicio': 'https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3', // Notificación ultra-rápida de 1 seg
+        'click': 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3', // Click seco de 0.5 seg
+        'agregar': 'https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3', // Notificación limpia
+        'cola': 'https://www.myinstants.com/media/sounds/left_4_dead_witch.mp3', // 🧟 Witch (¡Se cortará rápido!)
+        'sorteo': 'https://www.myinstants.com/media/sounds/l4d-safe-theme.mp3' // 🛡️ Sorteo Épico (Largo permitido)
+    };
+
+    // 2. Configuración de duraciones máximas para evitar ruidos molestos
+    const duracionesMaximas = {
+        'inicio': 1.5,   // Cortar rápido
+        'click': 0.5,    // Súper rápido
+        'agregar': 0.8,  // Instantáneo
+        'cola': 2.5,     // El grito de la Witch solo durará 2.5s
+        'sorteo': 8.0    // El sorteo tiene vía libre para sonar épico
+    };
+
+    let pathsAProbar = [`/Public/audio/${tipo}.mp3`, `/audio/${tipo}.mp3`];
+    let indiceRutaActual = 0;
+
+    function aplicarControlDeTiempoYFade(audio) {
+        const maxDur = duracionesMaximas[tipo] || 3.0;
+        
+        // Programamos el inicio del desvanecimiento 500ms antes del fin
+        const tiempoHastaFade = Math.max(0, (maxDur * 1000) - 500);
+        
+        setTimeout(() => {
+            let volumenActual = audio.volume;
+            const intervaloFade = setInterval(() => {
+                if (volumenActual > 0.05) {
+                    volumenActual -= 0.05;
+                    try { audio.volume = Math.max(0, volumenActual); } catch(e) {}
+                } else {
+                    clearInterval(intervaloFade);
+                    try {
+                        audio.pause();
+                        audio.currentTime = 0;
+                    } catch(e) {}
+                }
+            }, 50); // Baja el volumen gradualmente cada 50 milisegundos
+        }, tiempoHastaFade);
+    }
+
+    function intentarReproducir() {
+        if (indiceRutaActual < pathsAProbar.length) {
+            const path = pathsAProbar[indiceRutaActual];
+            const audioLocal = new Audio(path);
+            
+            audioLocal.oncanplaythrough = () => {
+                audioLocal.volume = 0.5;
+                audioLocal.play().catch(() => {});
+                aplicarControlDeTiempoYFade(audioLocal);
+            };
+
+            audioLocal.onerror = () => {
+                indiceRutaActual++;
+                intentarReproducir();
+            };
+        } else {
+            const urlOnline = respaldosOnline[tipo];
+            if (urlOnline) {
+                const audioOnline = new Audio(urlOnline);
+                audioOnline.volume = 0.5;
+                audioOnline.play().catch(e => console.warn("Autoplay bloqueado:", e));
+                aplicarControlDeTiempoYFade(audioOnline);
+            }
+        }
+    }
+
+    intentarReproducir();
 }
 
 // ===== LOCAL STORAGE =====
@@ -1758,5 +1844,308 @@ function calcularEquiposEquilibrados(listaJugadores) {
         return [eleccionFinal.equipoB, eleccionFinal.equipoA];
     }
 }
+// ===== READY CHECK / CONFIRMACIÓN DE PARTIDA (ANTI-FANTASMAS) =====
 
+// Abre el modal de confirmación para todos los jugadores convocados
+function abrirModalReadyCheck(activeMatch) {
+    const modalEl = document.getElementById('modal-ready-check');
+    if (!modalEl) return;
 
+    let modalInst = bootstrap.Modal.getInstance(modalEl);
+    if (!modalInst) {
+        modalInst = new bootstrap.Modal(modalEl);
+    }
+    modalInst.show();
+
+    // Renderizar los slots visuales de jugadores
+    renderizarReadyCheckUI(activeMatch);
+    // Iniciar el cronómetro visual de 15 segundos sincronizado
+    iniciarCuentaAtrasReadyCheck(activeMatch);
+}
+
+// Cierra forzosamente el modal de Ready Check
+function forzarCerrarModalReadyCheck() {
+    const modalEl = document.getElementById('modal-ready-check');
+    if (!modalEl) return;
+
+    let modalInst = bootstrap.Modal.getInstance(modalEl);
+    if (modalInst) {
+        modalInst.hide();
+    }
+    if (intervalReadyCheck) {
+        clearInterval(intervalReadyCheck);
+        intervalReadyCheck = null;
+    }
+}
+
+// Dibuja la parrilla de 4 u 8 jugadores y su estado de confirmación
+function renderizarReadyCheckUI(match) {
+    const container = document.getElementById('ready-players-grid');
+    const btnAceptar = document.getElementById('btn-aceptar-partida');
+    if (!container) return;
+
+    const todosLosJugadores = [...(match.team_alfa || []), ...(match.team_bravo || [])];
+    
+    container.innerHTML = todosLosJugadores.map(j => {
+        const estaListo = j.is_ready === true;
+        
+        // Clases visuales de estado premium
+        const borderClass = estaListo ? 'border-success border-3 shadow-pulse-green' : 'border-secondary border-opacity-25 opacity-75';
+        const iconClass = estaListo ? 'fa-user-check text-success animate__animated animate__bounceIn' : 'fa-user-ninja text-white-50 opacity-50';
+        const badgeClass = estaListo ? 'bg-success text-white' : 'bg-dark border border-warning border-opacity-50 text-warning animate__animated animate__pulse animate__infinite';
+        const textStatus = estaListo ? '¡LISTO!' : 'PENDIENTE...';
+
+        return `
+            <div class="col">
+                <div class="card bg-black p-3 text-center border rounded-3 h-100 ${borderClass}" style="transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); background: linear-gradient(145deg, #0f0f0f, #050505) !important;">
+                    <div class="mb-2">
+                        <i class="fas ${iconClass} fa-2x"></i>
+                    </div>
+                    <div class="fw-bold text-truncate mb-2" style="font-family: 'Oswald', sans-serif; font-size: 1rem; letter-spacing: 0.5px; color: #eee;">
+                        ${j.nombre}
+                    </div>
+                    <span class="badge ${badgeClass} px-2 py-1" style="font-size: 0.6rem; letter-spacing: 0.5px; font-family: 'Russo One';">
+                        ${textStatus}
+                    </span>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // Evaluar si el usuario que mira la pantalla es parte de la partida para habilitar el botón
+    if (btnAceptar) {
+        const miID = usuarioActual ? usuarioActual.id : null;
+        const yoEnPartida = todosLosJugadores.find(j => j.id === miID);
+
+        if (!yoEnPartida) {
+            // Soy un mero espectador esperando que empiece
+            btnAceptar.disabled = true;
+            btnAceptar.className = "btn btn-outline-secondary btn-lg px-5 fw-bold";
+            btnAceptar.innerHTML = '<i class="fas fa-eye me-2"></i> ESPECTADOR - ESPERANDO CONFIRMACIONES';
+        } else {
+            const yaAcepte = yoEnPartida.is_ready === true;
+            if (yaAcepte) {
+                btnAceptar.disabled = true;
+                btnAceptar.className = "btn btn-success btn-lg px-5 py-3 fw-bold text-uppercase border-0";
+                btnAceptar.innerHTML = '<i class="fas fa-check-circle me-2"></i> ¡YA CONFIRMASTE! ESPERANDO...';
+            } else {
+                btnAceptar.disabled = false;
+                btnAceptar.className = "btn btn-warning btn-lg px-5 py-3 fw-bold text-dark border-dark shadow-pulse";
+                btnAceptar.innerHTML = '<i class="fas fa-gamepad me-2"></i> ACEPTAR PARTIDA';
+            }
+        }
+    }
+
+    // 🚀 AUTO-CHEQUEO: Si el 100% de los jugadores están listos, avanzar globalmente a la fase de votación!
+    const countReady = todosLosJugadores.filter(j => j.is_ready === true).length;
+    const countTotal = todosLosJugadores.length;
+
+    if (countReady === countTotal && countTotal > 0 && match.is_voting_enabled === false) {
+        console.log("🔥 ¡FÓRMULA COMPLETA! Todos dieron Ready. Avanzando match...");
+        intentarAvanzarPartidaAVotacion(match);
+    }
+}
+
+// El usuario actual confirma su asistencia marcando is_ready = true en Supabase
+async function aceptarMatch() {
+    if (!partidaActiva || !usuarioActual) return;
+
+    try {
+        // Descargamos último snapshot del match para asegurar concurrencia perfecta
+        const { data: refreshed, error } = await supabase
+            .from('matches')
+            .select('*')
+            .eq('id', partidaActiva.id)
+            .single();
+
+        if (error || !refreshed) throw error || new Error("Match no hallado");
+
+        let usuarioHallado = false;
+
+        // Patch del estado 'is_ready' dentro del JSONB local
+        const alfaMod = (refreshed.team_alfa || []).map(j => {
+            if (j.id === usuarioActual.id) {
+                j.is_ready = true;
+                usuarioHallado = true;
+            }
+            return j;
+        });
+
+        const bravoMod = (refreshed.team_bravo || []).map(j => {
+            if (j.id === usuarioActual.id) {
+                j.is_ready = true;
+                usuarioHallado = true;
+            }
+            return j;
+        });
+
+        if (!usuarioHallado) {
+            mostrarNotificacion('⚠️ No perteneces a los jugadores seleccionados para este match.', 'warning');
+            return;
+        }
+
+        // Sonar Click
+        reproducirSonido('click');
+
+        // Push de actualización a Supabase
+        const { error: updErr } = await supabase
+            .from('matches')
+            .update({
+                team_alfa: alfaMod,
+                team_bravo: bravoMod
+            })
+            .eq('id', refreshed.id);
+
+        if (updErr) throw updErr;
+        console.log("✅ Confirmación de asistencia grabada en Supabase con éxito!");
+
+    } catch (err) {
+        console.error("Error aceptando match:", err);
+        mostrarNotificacion('❌ Error de conexión al aceptar partida', 'danger');
+    }
+}
+
+// Lanza la cuenta regresiva de 15 segundos de forma sincronizada en todos los clientes
+function iniciarCuentaAtrasReadyCheck(match) {
+    if (intervalReadyCheck) clearInterval(intervalReadyCheck);
+
+    const display = document.getElementById('ready-timer-display');
+    if (!display) return;
+
+    const DURACION_MAXIMA = 15; // 15 segundos de tolerancia
+    const timeCreacion = new Date(match.created_at).getTime();
+
+    const tickRC = () => {
+        const ahora = new Date().getTime();
+        const transcurridos = Math.floor((ahora - timeCreacion) / 1000);
+        const restantes = Math.max(0, DURACION_MAXIMA - transcurridos);
+
+        display.innerText = `${restantes}s`;
+
+        // Efecto cardíaco dramático en los últimos 5 segundos
+        if (restantes <= 5) {
+            display.className = 'badge bg-danger fs-4 px-4 py-2 border border-danger shadow-pulse animate__animated animate__heartBeat animate__infinite';
+        } else {
+            display.className = 'badge bg-danger fs-4 px-4 py-2 border border-danger shadow-pulse';
+        }
+
+        if (restantes === 0) {
+            clearInterval(intervalReadyCheck);
+            intervalReadyCheck = null;
+            console.warn("⏰ ¡Ready Check Expirado! Ejecutando limpieza de AFKs...");
+            procesarExpiracionReadyCheck(match);
+        }
+    };
+
+    tickRC(); // Ejecución inmediata
+    intervalReadyCheck = setInterval(tickRC, 1000);
+}
+
+// Si acaba el tiempo y hay ausentes, se expulsa a los culpables y se cancela la cola
+async function procesarExpiracionReadyCheck(match) {
+    try {
+        // 1. Consultar estado fresquísimo del servidor
+        const { data: refreshed, error } = await supabase
+            .from('matches')
+            .select('*')
+            .eq('id', match.id)
+            .single();
+
+        if (error || !refreshed || refreshed.is_voting_enabled !== false) {
+            // Ya se borró o avanzó, abortamos
+            return;
+        }
+
+        // 2. 🛡️ PROTECCIÓN HORARIA DE SEGURIDAD: Verificar si REALMENTE pasaron los 15 segundos
+        const ahora = new Date().getTime();
+        const creacion = new Date(refreshed.created_at).getTime();
+        const segundosReales = (ahora - creacion) / 1000;
+
+        if (segundosReales < 14.5) {
+            // Previene falsas alarmas o desincronizaciones ínfimas de milisegundos del cliente
+            return;
+        }
+
+        const todos = [...(refreshed.team_alfa || []), ...(refreshed.team_bravo || [])];
+        const ausentes = todos.filter(j => j.is_ready !== true);
+
+        // Si justo en el último ms aceptaron todos, salvar match!
+        if (ausentes.length === 0) return;
+
+        console.log("🧹 [Auto-Cleaner] Detectado Match expirado. Depurando base de datos de forma autónoma...");
+
+        const idsAFK = ausentes.map(j => j.id);
+
+        // ⚡ DEPURACIÓN DISTRIBUIDA:
+        // Cualquier cliente (incluso visitantes o pantallas refrescadas antes de loguear) 
+        // ejecuta el saneamiento en Supabase para evitar registros 'Zombies'.
+        
+        if (idsAFK.length > 0) {
+            await supabase
+                .from('lobby_queue')
+                .delete()
+                .in('profile_id', idsAFK);
+        }
+
+        // Marcar el match fallido como cancelado (Soft-Delete oficial soportado por RLS)
+        await supabase
+            .from('matches')
+            .update({ status: 'canceled' })
+            .eq('id', refreshed.id);
+
+        // Mostrar notificación solo si no se había mostrado antes en esta ventana
+        mostrarNotificacion('⏳ Ready Check expirado. Cola cancelada y AFKs expulsados.', 'warning');
+
+    } catch (err) {
+        console.error("Error en limpieza autónoma de AFKs:", err);
+    }
+}
+
+// Avanza el match a 'voting' y expulsa de lobby_queue a los 8 confirmados
+let lockAvanzarRC = false;
+async function intentarAvanzarPartidaAVotacion(match) {
+    if (lockAvanzarRC) return;
+    lockAvanzarRC = true;
+
+    try {
+        const esHost = match.recorded_by === (usuarioActual ? usuarioActual.id : null);
+        
+        // Solo el HOST que armó la partida gatilla el avance en Base de Datos
+        if (!esHost) {
+            lockAvanzarRC = false;
+            return; 
+        }
+
+        console.log("🔑 Host detectado. Avanzando match a VOTACIÓN...");
+
+        // 1. Habilitar la votación de mapas oficialmente en Supabase!
+        const { error: updErr } = await supabase
+            .from('matches')
+            .update({ is_voting_enabled: true })
+            .eq('id', match.id);
+
+        if (updErr) throw updErr;
+
+        // 2. 🚀 AHORA SÍ, expulsar oficialmente a los 8 confirmados del Lobby global!
+        const todosIds = [...(match.team_alfa || []), ...(match.team_bravo || [])].map(j => j.id);
+        await supabase
+            .from('lobby_queue')
+            .delete()
+            .in('profile_id', todosIds);
+
+        // 3. Notificar éxito y disparar efectos de sonido de horda
+        mostrarNotificacion('⚔️ ¡PARTIDA CONFIRMADA! Entrando a votación de mapa...', 'success');
+        reproducirSonido('cola');
+
+        // Limpiar intervalo local
+        if (intervalReadyCheck) {
+            clearInterval(intervalReadyCheck);
+            intervalReadyCheck = null;
+        }
+
+    } catch (err) {
+        console.error("Error al avanzar match confirmado:", err);
+    } finally {
+        lockAvanzarRC = false;
+    }
+}
