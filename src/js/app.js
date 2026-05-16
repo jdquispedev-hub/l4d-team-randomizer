@@ -2012,7 +2012,7 @@ function iniciarCuentaAtrasReadyCheck(match) {
     const display = document.getElementById('ready-timer-display');
     if (!display) return;
 
-    const DURACION_MAXIMA = 15; // 15 segundos de tolerancia
+    const DURACION_MAXIMA = 30; // 30 segundos de tolerancia
     const timeCreacion = new Date(match.created_at).getTime();
 
     const tickRC = () => {
@@ -2061,7 +2061,7 @@ async function procesarExpiracionReadyCheck(match) {
         const creacion = new Date(refreshed.created_at).getTime();
         const segundosReales = (ahora - creacion) / 1000;
 
-        if (segundosReales < 14.5) {
+        if (segundosReales < 29.5) {
             // Previene falsas alarmas o desincronizaciones ínfimas de milisegundos del cliente
             return;
         }
