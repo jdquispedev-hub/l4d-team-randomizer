@@ -39,10 +39,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             dashUser.textContent = profile.username;
             statGames.textContent = profile.games_played;
 
-            // Lógica de Calibración visual
-            if (profile.games_played < 10) {
+            // Lógica de Calibración visual (3 partidas)
+            if (profile.games_played < 3) {
                 mmrBig.textContent = '???';
-                calBadge.textContent = `Calibrando (${profile.games_played}/10)`;
+                calBadge.textContent = `Calibrando (${profile.games_played}/3)`;
                 calBadge.className = 'badge bg-warning text-dark px-3 py-2';
             } else {
                 mmrBig.textContent = profile.mmr;

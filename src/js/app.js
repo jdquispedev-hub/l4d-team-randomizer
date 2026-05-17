@@ -127,8 +127,8 @@ async function verificarSesionUsuario() {
                                 ¡Hola de nuevo, ${profile.username}!
                             </h2>
                             <p class="text-white-50 mb-0">
-                                MMR Actual: <span class="badge bg-info">${profile.games_played < 10 ? 'Calibrando' : profile.mmr}</span> 
-                                | Partidas: ${profile.games_played}/10
+                                MMR Actual: <span class="badge bg-info">${profile.games_played < 3 ? 'Calibrando' : profile.mmr}</span> 
+                                | Partidas: ${profile.games_played}/3 calibración
                             </p>
                         </div>
                         <div class="col-md-4 text-end">
@@ -1034,6 +1034,10 @@ async function finalizarPartidaConGanador(ganadorNombre) {
         // Limpiamos partida activa ya que terminó
         partidaActiva = null;
 
+        // ✅ FIX BUG 2: Forzar recarga de cola desde Supabase INMEDIATAMENTE después de declarar ganador.
+        // Sin esto, el usuario no podía volver a unirse a la cola porque la cola local seguía en estado 'llena'.
+        await cargarColaDesdeSupabase();
+
         // Recargamos el grid de clasificación de jugadores y la UI en vivo!
         await actualizarInterfaz();
 
@@ -1115,9 +1119,13 @@ async function nuevoSorteo() {
     if (elementos.containerMapaElegido) elementos.containerMapaElegido.innerHTML = '';
     if (elementos.adminResolvePanel) elementos.adminResolvePanel.style.display = 'none';
 
+    // ✅ FIX BUG 3: Recargar cola real desde Supabase sin esperar al Realtime lento.
+    // Antes, al declarar ganador y tratar de unirse a la cola, el front creía que seguía 'llena'.
+    await cargarColaDesdeSupabase();
+
     actualizarInterfaz();
     guardarDatosLocalStorage();
-    mostrarNotificacion('🔄 Preparando nuevo sorteo global...', 'info');
+    mostrarNotificacion('🔄 Lobby limpio. ¡Listo para un nuevo sorteo!', 'info');
 }
 
 // ===== FUNCIONES DE UI =====
@@ -1242,7 +1250,7 @@ async function actualizarJugadoresGrid() {
 
         // Renderizado Compacto de Barra Lateral
         elementos.jugadoresGrid.innerHTML = players.map((p, index) => {
-            const mmrDisplay = p.games_played < 10 ? '???' : (p.mmr || 1000);
+            const mmrDisplay = p.games_played < 3 ? '???' : (p.mmr || 1000);
             const enCola = colaJugadores.some(c => c.id === p.id);
             const rankPos = index + 1;
 
@@ -1310,7 +1318,7 @@ function actualizarCola() {
 
     elementos.colaLista.innerHTML = colaJugadores.map((jugador, index) => {
         // Lógica de Ocultar MMR en Cola si está calibrando
-        const mmrCola = jugador.games_played < 10 ? 'Calibrando' : jugador.nivel;
+        const mmrCola = jugador.games_played < 3 ? 'Calibrando' : jugador.nivel;
         return `
             <li class="queue-item">
                 <strong>#${index + 1}</strong> ${jugador.nombre} - 
@@ -1949,6 +1957,14 @@ function renderizarReadyCheckUI(match) {
 // El usuario actual confirma su asistencia marcando is_ready = true en Supabase
 async function aceptarMatch() {
     if (!partidaActiva || !usuarioActual) return;
+
+    // ⚡ FIX BUG 1: Feedback visual INMEDIATO antes del roundtrip de red (optimistic UI)
+    const btnAceptar = document.getElementById('btn-aceptar-partida');
+    if (btnAceptar) {
+        btnAceptar.disabled = true;
+        btnAceptar.className = 'btn btn-success btn-lg px-5 py-3 fw-bold text-uppercase border-0';
+        btnAceptar.innerHTML = '<i class="fas fa-circle-notch fa-spin me-2"></i> CONFIRMANDO...';
+    }
 
     try {
         // Descargamos último snapshot del match para asegurar concurrencia perfecta
