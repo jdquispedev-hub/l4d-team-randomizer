@@ -1628,7 +1628,7 @@ document.head.appendChild(estilosDinamicos);
 
 // 🏅 SISTEMA DE RANGOS COMUNITARIO - ESCALA DE 400 PTS (3K+)
 function obtenerRangoBadge(mmr, gamesPlayed) {
-    if (gamesPlayed < 10) {
+    if (gamesPlayed < 3) {
         return `<span class="badge bg-dark text-white-50 border border-secondary border-opacity-25 py-1" style="font-size:0.65rem; letter-spacing:0.5px; font-weight:bold;">
             <i class="fas fa-spinner fa-spin me-1"></i>CALIBRANDO...
         </span>`;

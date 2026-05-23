@@ -150,12 +150,20 @@ function filtrarYRenderizar(query) {
         else if (posOriginal === 3) medalHTML = '<span class="medal-container">🥉</span>';
 
         // Definir Insignia de Rango por MMR
-        const liga = calcularRangoLiga(j.mmr);
-        const badgeRangoHTML = `
+        const liga = j.games_played < 3 ? null : calcularRangoLiga(j.mmr);
+        const badgeRangoHTML = liga
+            ? `
             <span class="badge-rango" style="background: rgba(${liga.rgb}, 0.1); border: 1.5px solid rgba(${liga.rgb}, 0.4); color: rgb(${liga.rgb}); text-shadow: 0 0 8px rgba(${liga.rgb}, 0.3);">
                 <i class="fas ${liga.icon} me-1"></i> ${liga.titulo}
             </span>
-        `;
+            `
+            : `
+            <span class="badge bg-dark text-white-50 border border-secondary border-opacity-25 py-1 px-2.5" style="font-size:0.65rem; letter-spacing:0.5px; font-weight:bold; border-radius: 4px; font-family: 'Russo One', sans-serif;">
+                <i class="fas fa-spinner fa-spin me-1"></i>CALIBRANDO
+            </span>
+            `;
+
+        const mmrDisplay = j.games_played < 3 ? '???' : j.mmr;
 
         // Colores y clases dinámicas para el Win Rate
         let wrColor = '#ff4444'; // Rojo por defecto
@@ -204,11 +212,11 @@ function filtrarYRenderizar(query) {
                 </td>
                 <td class="py-3">
                     <span class="mmr-text text-warning" style="text-shadow: 0 0 10px rgba(255, 193, 7, 0.25);">
-                        ${j.mmr}
+                        ${mmrDisplay}
                     </span>
                 </td>
                 <td class="py-3" style="font-family: 'Oswald'; font-size: 1.1rem; color: #bbb;">
-                    ${j.totalJugadasReal}
+                    ${j.games_played}
                 </td>
                 <td class="py-3">
                     ${rachaHTML}
