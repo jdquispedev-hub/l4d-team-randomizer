@@ -701,11 +701,36 @@ function iniciarCuentaAtrasVisual() {
     if (!spanReloj || !partidaActiva) return;
 
     const duracionTotal = 20; // Duración establecida de 20 segundos
-    const timestampCreacion = new Date(partidaActiva.created_at).getTime();
+
+    // 🛡️ CORRECCIÓN DE BUG CLAVE:
+    // El Ready Check (confirmación) consume hasta 30 segundos del ciclo de vida del Match.
+    // Si usáramos 'partidaActiva.created_at', el tiempo de votación ya estaría agotado (0s) al entrar al modal.
+    // Para solucionarlo de forma ultra robusta y sin alterar el esquema de base de datos ni infringir políticas RLS,
+    // registramos en localStorage el instante preciso en el que este cliente detectó el inicio de la votación.
+    const localKey = `voting_start_${partidaActiva.id}`;
+    let localStart = localStorage.getItem(localKey);
+    if (!localStart) {
+        localStart = Date.now().toString();
+        localStorage.setItem(localKey, localStart);
+    }
+    const timestampCreacion = parseInt(localStart);
+
+    // Limpieza de claves obsoletas de votación anteriores en localStorage para liberar espacio
+    try {
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('voting_start_') && key !== localKey) {
+                localStorage.removeItem(key);
+                i--;
+            }
+        }
+    } catch (e) {
+        console.error("Error limpiando localStorage de votaciones:", e);
+    }
 
     const tick = async () => {
         const ahora = new Date().getTime();
-        // Calculamos exactamente los segundos reales transcurridos desde la base de datos!
+        // Calculamos exactamente los segundos reales transcurridos desde que se abrió la votación
         const transcurridos = Math.floor((ahora - timestampCreacion) / 1000);
         const restantes = Math.max(0, duracionTotal - transcurridos);
 
@@ -744,6 +769,11 @@ function forzarCerrarModalVotacion() {
     if (intervalCuentaAtras) {
         clearInterval(intervalCuentaAtras);
         intervalCuentaAtras = null;
+    }
+
+    // Limpieza de la clave local de la votación actual
+    if (partidaActiva) {
+        localStorage.removeItem(`voting_start_${partidaActiva.id}`);
     }
 
     const modalElement = document.getElementById('modal-votacion-mapas');
@@ -1033,6 +1063,14 @@ async function finalizarPartidaConGanador(ganadorNombre) {
 
         // Limpiamos partida activa ya que terminó
         partidaActiva = null;
+
+        // ✅ FIX BUG 4: Ocultar los equipos formados y limpiar el estado visual al finalizar la partida.
+        // Sin esto, los equipos seguían visibles en pantalla aunque la partida ya hubiera terminado.
+        equipos = [];
+        mapaSeleccionado = null;
+        if (elementos.resultadosSection) elementos.resultadosSection.style.display = 'none';
+        if (elementos.equiposResultados) elementos.equiposResultados.innerHTML = '';
+        if (elementos.containerMapaElegido) elementos.containerMapaElegido.innerHTML = '';
 
         // ✅ FIX BUG 2: Forzar recarga de cola desde Supabase INMEDIATAMENTE después de declarar ganador.
         // Sin esto, el usuario no podía volver a unirse a la cola porque la cola local seguía en estado 'llena'.
