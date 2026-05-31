@@ -976,9 +976,9 @@ footer {
 
 /* Sobreescritura agresiva de badges generados inline en JS para forzar encaje */
 #jugadores-grid .badge {
-    font-size: 0.58rem !important;
-    padding: 3px 6.5px !important;
-    max-width: 135px !important; /* Más generoso dado el ancho 33% de col-xl-4 */
+    font-size: 0.68rem !important;
+    padding: 4px 8px !important;
+    max-width: 190px !important; /* Más generoso dado el nuevo ancho del panel */
     display: inline-block !important;
     white-space: nowrap !important;
     overflow: hidden !important;
@@ -989,8 +989,8 @@ footer {
 }
 
 #jugadores-grid .badge i {
-    font-size: 0.55rem !important;
-    margin-right: 3px !important;
+    font-size: 0.65rem !important;
+    margin-right: 4px !important;
     vertical-align: middle;
 }
 
@@ -1003,8 +1003,8 @@ footer {
     margin: 0 auto;
     padding: 2rem 15px;
     width: 100%;
-    /* Protege el ancho total: 1120px (Centro) + 320px (Lateral) + 30px (Gaps) */
-    max-width: 1500px; 
+    /* Protege el ancho total: 1120px (Centro) + 380px (Lateral) + 30px (Gaps) */
+    max-width: 1560px; 
 }
 
 .lobby-main-content {
@@ -1015,7 +1015,7 @@ footer {
 }
 
 .lobby-sidebar-content {
-    width: 320px;
+    width: 380px;
     flex-shrink: 0;
     /* Permite que crezca hasta su límite máximo, pero empieza acoplado */
     align-self: flex-start;
