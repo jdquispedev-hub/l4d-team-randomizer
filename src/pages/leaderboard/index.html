@@ -157,6 +157,85 @@
             border-color: #dc3545;
             box-shadow: 0 0 15px rgba(220, 53, 69, 0.4);
         }
+
+        /* --- ESTILOS EXTRA PARA MODAL DE EXPEDIENTE --- */
+        .modal-player-header {
+            background: linear-gradient(135deg, #160202 0%, #0c0000 100%) !important;
+            border-bottom: 2px solid rgba(220, 53, 69, 0.25) !important;
+        }
+
+        .avatar-huge-container {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3rem;
+            background: radial-gradient(circle, #2a0808 0%, #0c0000 100%);
+            border: 3px solid rgba(255, 193, 7, 0.3);
+            box-shadow: 0 0 20px rgba(255, 193, 7, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .avatar-huge-container:hover {
+            transform: scale(1.05) rotate(5deg);
+            border-color: #ffc107;
+            box-shadow: 0 0 25px rgba(255, 193, 7, 0.35);
+        }
+
+        .card-stat-box {
+            background: rgba(10, 10, 10, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 15px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .card-stat-box:hover {
+            background: rgba(20, 20, 20, 0.85);
+            border-color: rgba(255, 193, 7, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .card-stat-value {
+            font-family: 'Oswald', sans-serif;
+            font-size: 1.8rem;
+            font-weight: 700;
+            line-height: 1;
+            margin-bottom: 5px;
+        }
+
+        .card-stat-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #aaa;
+        }
+
+        .history-match-item {
+            background: rgba(15, 15, 15, 0.5) !important;
+            border: 1px solid rgba(255, 255, 255, 0.04) !important;
+            border-radius: 8px !important;
+            margin-bottom: 8px;
+            padding: 10px 15px;
+            transition: all 0.2s ease;
+        }
+
+        .history-match-item:hover {
+            background: rgba(30, 10, 10, 0.3) !important;
+            border-color: rgba(255, 68, 68, 0.15) !important;
+            transform: translateX(4px);
+        }
+
+        .map-thumbnail-mini {
+            width: 70px;
+            height: 42px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
     </style>
 </head>
 
@@ -176,7 +255,7 @@
 
         <!-- TÍTULO PRINCIPAL -->
         <div class="text-center mb-5 animate__animated animate__zoomIn">
-            <h1 class="display-4 fw-bold text-uppercase mb-2" style="font-family: 'Russo One', sans-serif; letter-spacing: 3px; background: linear-gradient(to right, #ffffff, #ffc107, #ff4444); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 0 15px rgba(255, 193, 7, 0.15));">
+            <h1 class="display-4 fw-bold text-uppercase mb-2" style="font-family: 'Russo One', sans-serif; letter-spacing: 3px; background: linear-gradient(to right, #ffffff, #ffc107, #ff4444); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 0 15px rgba(255, 193, 7, 0.15));">
                 🏆 SALÓN DE LA FAMA 🏆
             </h1>
             <p class="lead text-white-50 fw-light" style="font-family: 'Oswald', sans-serif; font-size: 1.25rem; letter-spacing: 1px;">
@@ -230,6 +309,23 @@
             <i class="fas fa-biohazard text-danger me-1"></i> Actualizado en vivo mediante Supabase Realtime • L4D2 Team Randomizer &copy; 2026
         </div>
 
+    </div>
+
+    <!-- MODAL DETALLE DE JUGADOR (PLAYER EXPEDIENT CARD) -->
+    <div class="modal fade" id="modal-detalle-jugador" tabindex="-1" aria-labelledby="modalDetalleLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content text-white border-warning" style="background: linear-gradient(145deg, #150808, #050505) !important; border-width: 2.5px; box-shadow: 0 0 35px rgba(220, 53, 69, 0.25);">
+                <div class="modal-header modal-player-header py-3 d-flex justify-content-between align-items-center">
+                    <h5 class="modal-title fw-bold text-warning text-uppercase" style="font-family: 'Russo One', sans-serif; letter-spacing: 1.5px;" id="modalDetalleLabel">
+                        <i class="fas fa-id-card me-2 text-danger"></i> EXPEDIENTE DE COMBATE
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4" id="modal-detalle-body">
+                    <!-- Rellenado dinámicamente con JavaScript -->
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Scripts de Dependencias -->
