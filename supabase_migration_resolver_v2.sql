@@ -131,3 +131,47 @@ $$;
 
 -- Confirmar que se creó correctamente
 SELECT 'Función resolver_partida v2.2 (Robusto) instalada correctamente. Calibración: 3 partidas +/-60 MMR. Clasificados: +/-20 a 30 MMR.' AS resultado;
+
+
+-- ==========================================
+-- FUNCIÓN: marcar_jugador_listo (Atomic ready check update)
+-- Evita condiciones de carrera cuando múltiples jugadores confirman a la vez.
+-- ==========================================
+CREATE OR REPLACE FUNCTION marcar_jugador_listo(
+    match_id_param BIGINT,
+    user_id_param UUID
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    UPDATE matches
+    SET 
+        team_alfa = COALESCE(
+            (
+                SELECT jsonb_agg(
+                    CASE 
+                        WHEN (elem->>'id')::UUID = user_id_param THEN elem || '{"is_ready": true}'::jsonb
+                        ELSE elem
+                    END
+                )
+                FROM jsonb_array_elements(team_alfa) AS elem
+            ),
+            team_alfa
+        ),
+        team_bravo = COALESCE(
+            (
+                SELECT jsonb_agg(
+                    CASE 
+                        WHEN (elem->>'id')::UUID = user_id_param THEN elem || '{"is_ready": true}'::jsonb
+                        ELSE elem
+                    END
+                )
+                FROM jsonb_array_elements(team_bravo) AS elem
+            ),
+            team_bravo
+        )
+    WHERE id = match_id_param;
+END;
+$$;
