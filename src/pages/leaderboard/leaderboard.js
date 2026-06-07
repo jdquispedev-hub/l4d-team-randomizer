@@ -190,7 +190,7 @@ function filtrarYRenderizar(query) {
         const trStyle = posOriginal <= 3 ? 'border-left: 4px solid rgba(255, 193, 7, 0.5) !important;' : '';
 
         return `
-            <tr class="animate__animated animate__fadeInUp animate__faster" style="${trStyle}" onclick="abrirDetalleJugador('${j.id}')">
+            <tr style="${trStyle}" onclick="abrirDetalleJugador('${j.id}')">
                 <td class="py-3 text-center">
                     ${medalHTML}
                 </td>
