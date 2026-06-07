@@ -2005,7 +2005,7 @@ async function aceptarMatch() {
     }
 
     try {
-        // Descargamos último snapshot del match para asegurar concurrencia perfecta
+        // Descargamos último snapshot del match para asegurar pertenencia
         const { data: refreshed, error } = await supabase
             .from('matches')
             .select('*')
@@ -2014,41 +2014,29 @@ async function aceptarMatch() {
 
         if (error || !refreshed) throw error || new Error("Match no hallado");
 
-        let usuarioHallado = false;
-
-        // Patch del estado 'is_ready' dentro del JSONB local
-        const alfaMod = (refreshed.team_alfa || []).map(j => {
-            if (j.id === usuarioActual.id) {
-                j.is_ready = true;
-                usuarioHallado = true;
-            }
-            return j;
-        });
-
-        const bravoMod = (refreshed.team_bravo || []).map(j => {
-            if (j.id === usuarioActual.id) {
-                j.is_ready = true;
-                usuarioHallado = true;
-            }
-            return j;
-        });
+        const alfaMod = refreshed.team_alfa || [];
+        const bravoMod = refreshed.team_bravo || [];
+        const usuarioHallado = alfaMod.some(j => j.id === usuarioActual.id) || bravoMod.some(j => j.id === usuarioActual.id);
 
         if (!usuarioHallado) {
             mostrarNotificacion('⚠️ No perteneces a los jugadores seleccionados para este match.', 'warning');
+            if (btnAceptar) {
+                btnAceptar.disabled = false;
+                btnAceptar.className = "btn btn-warning btn-lg px-5 py-3 fw-bold text-dark border-dark shadow-pulse";
+                btnAceptar.innerHTML = '<i class="fas fa-gamepad me-2"></i> ACEPTAR PARTIDA';
+            }
             return;
         }
 
         // Sonar Click
         reproducirSonido('click');
 
-        // Push de actualización a Supabase
+        // Push de actualización a Supabase usando la función RPC para evitar condiciones de carrera (concurrencia)
         const { error: updErr } = await supabase
-            .from('matches')
-            .update({
-                team_alfa: alfaMod,
-                team_bravo: bravoMod
-            })
-            .eq('id', refreshed.id);
+            .rpc('marcar_jugador_listo', {
+                match_id_param: refreshed.id,
+                user_id_param: usuarioActual.id
+            });
 
         if (updErr) throw updErr;
         console.log("✅ Confirmación de asistencia grabada en Supabase con éxito!");
@@ -2056,6 +2044,11 @@ async function aceptarMatch() {
     } catch (err) {
         console.error("Error aceptando match:", err);
         mostrarNotificacion('❌ Error de conexión al aceptar partida', 'danger');
+        if (btnAceptar) {
+            btnAceptar.disabled = false;
+            btnAceptar.className = "btn btn-warning btn-lg px-5 py-3 fw-bold text-dark border-dark shadow-pulse";
+            btnAceptar.innerHTML = '<i class="fas fa-gamepad me-2"></i> ACEPTAR PARTIDA';
+        }
     }
 }
 
